@@ -3,6 +3,7 @@ import csv
 import re
 from subprocess import Popen, PIPE
 import os
+import collections
 
 import pdb
 import numpy as np
@@ -135,7 +136,7 @@ class Plotter():
         self.avgdata = tmp_data
 
 
-    def eacct_loop(self,jobid,stepid = 0):
+    def get_eacct_jobloop(self,jobid,stepid = 0):
 
         self.filename = jobid+"."+str(stepid)+'.csv'
 
@@ -151,9 +152,30 @@ class Plotter():
         error = error.decode('ISO-8859-1').strip()
                 
         try:
-            tmp_data = pd.read_csv(self.filename,delimiter=";")
-            tmp_data = self.get_partition(tmp_data)
-            tmp_data['time'] = (pd.to_datetime(tmp_data['DATE']) - pd.to_datetime(tmp_data['DATE']).min()).dt.seconds
+
+            header_list = []
+            values_list = []
+            idx = 0
+            with open(self.filename) as csvfile:
+                reader = csv.reader(csvfile, delimiter=";")
+                for row in reader:
+                    if idx == 0:
+                        header_list = row
+                        idx += 1 # maybe there is better logic here
+                        for i in range(len(header_list)):
+                            values_list.append([])
+                        continue
+                    else:
+                        for i in range(len(row)):
+                            try:
+                                values_list[i].append(float(row[i]))
+                            except:
+                                values_list[i].append(row[i])
+                                    
+            tmp_data = {}
+            for column in header_list:
+                
+                tmp_data[column] = values_list[header_list.index(column)]
             self.loopdata = tmp_data
             self.loops_status = True
         except:
@@ -223,7 +245,7 @@ class Plotter():
             for metric in metrics:
                 plot_index = metrics.index(metric) 
                 plx.subplot(1,2).subplot(plot_index +1 , 1)
-                plx.scatter(self.loopdata["time"], self.loopdata[metric],color='red',marker='dot')
+                plx.scatter(self.loopdata["TIMESTAMP"], self.loopdata[metric],color='red',marker='dot')
                 plx.ylabel(metric)
                 
                 #plx.ylim(0,1)
@@ -251,7 +273,7 @@ if __name__ == "__main__":
         exit(1)
     if args.jobid:
         plotter.get_eacct_jobavg(args.jobid[0])
-        plotter.eacct_loop(args.jobid[0])
+        plotter.get_eacct_jobloop(args.jobid[0])
         plotter.terminal(args.metrics)
 
     #plotter.roofline()
