@@ -3,12 +3,10 @@ import csv
 import re
 from subprocess import Popen, PIPE
 import os
-import collections
 
 import pdb
 import numpy as np
 import plotext as plx
-import pandas as pd
 
 
 class Plotter():
@@ -42,18 +40,37 @@ class Plotter():
                             }
 
 
+
+
     def get_architecture_specs(self, data):
 
         with open("data/architecture_specs.csv") as csvfile:
             reader = csv.DictReader(csvfile, delimiter=";")
             for row in reader:
                 if row["NAME"] == data['Arch']:
-                    for key in row.keys():
-                        if key == "NAME":
-                            # skip the NAME since it is already in Arch
-                            continue
-                        else:
-                            data[key] = row[key]
+
+                    self.arch_name = row['NAME']
+                    self.arch_ncores = float(row['NCORES'])
+                    self.arch_freq = float(row['CPU_FREQ_GHZ'])
+                    self.arch_NDPs = float(row['NDPS'])
+                    self.arch_memory_freq = float(row['MEM_FREQ_MHZ'])
+                    self.arch_memory_channels = float(row['N_MEM_CHANNELS'])
+                    self.arch_DP_RPEAK = self.arch_ncores * self.arch_freq * self.arch_NDPs
+                    self.arch_SP_RPEAK = self.arch_DP_RPEAK * 2.0
+                    self.arch_HP_RPEAK = self.arch_DP_RPEAK * 4.0
+                    # DRAMBW = (bits/bytes) * Mem_freq * N channels * (Mega/Giga)
+                    self.arch_DRAMBW = (64./8.) * self.arch_memory_freq * self.arch_memory_channels * (1e6/1e9) 
+
+                    #pdb.set_trace()
+                    #for key in row.keys():
+                    #    if key == "NAME":
+                    #        # skip the NAME since it is already in Arch
+                    #        continue
+                    #    else:
+                    #        try:
+                    #            data[key] = [float(row[key])]
+                    #        except:
+                    #            data[key] = [row[key]]
 
         return(data)
 
@@ -73,8 +90,8 @@ class Plotter():
 
     def get_partition(self, data):
 
-        node_type = re.search(r'([a-zA-Z]*)',data['NODENAME'])[0]
-        node_number = int(re.search(r'(\d+)',data['NODENAME'])[0])
+        node_type = re.search(r'([a-zA-Z]*)',data['NODENAME'][0])[0]
+        node_number = int(re.search(r'(\d+)',data['NODENAME'][0])[0])
 
         if (node_type == "tcn") & (node_number <= 525):
             data['Arch'] = "AMD Rome 7H12 (2x)"
@@ -93,6 +110,34 @@ class Plotter():
     def print_timeline_metrics(self):
         print(self.loop_metrics)
 
+    def csv_reader(self):
+
+        header_list = []
+        values_list = []
+        idx = 0
+        with open(self.filename) as csvfile:
+            reader = csv.reader(csvfile, delimiter=";")
+            for row in reader:
+                if idx == 0:
+                    header_list = row
+                    idx += 1 # maybe there is better logic here
+                    for i in range(len(header_list)):
+                        values_list.append([])
+                    continue
+                else:
+                    for i in range(len(row)):
+                        try:
+                            values_list[i].append(float(row[i]))
+                        except:
+                            values_list[i].append(row[i])
+                                
+        tmp_data = {}
+        for column in header_list:
+            
+            tmp_data[column] = values_list[header_list.index(column)]
+        
+        return(tmp_data)
+            
 
     def get_eacct_jobavg(self,jobid,stepid = 0):
 
@@ -112,28 +157,14 @@ class Plotter():
             print(output)
             exit(1)
         
-        tmp_data = {} # this will only work for an average job
-        with open(self.filename) as csvfile:
-            reader = csv.DictReader(csvfile, delimiter=";")
-            for row in reader:
-                tmp_data = row
-        
+        tmp_data = self.csv_reader()
         tmp_data = self.get_partition(tmp_data)
         tmp_data = self.get_architecture_specs(tmp_data)
 
-        # convert dictionary items to floats
-        for k, v in tmp_data.items():
-            try:
-                tmp_data[k] = float(v)
-            except:
-                pass # some values will be strings
-        
-        self.set_architecture_specs(tmp_data)
-
-        
-        tmp_data['OI'] = tmp_data['CPU-GFLOPS']/tmp_data['MEM_GBS']
+        tmp_data['OI'] = [tmp_data['CPU-GFLOPS'][0]/tmp_data['MEM_GBS'][0]]
         
         self.avgdata = tmp_data
+        os.remove(self.filename) 
 
 
     def get_eacct_jobloop(self,jobid,stepid = 0):
@@ -152,7 +183,6 @@ class Plotter():
         error = error.decode('ISO-8859-1').strip()
                 
         try:
-
             header_list = []
             values_list = []
             idx = 0
@@ -178,6 +208,7 @@ class Plotter():
                 tmp_data[column] = values_list[header_list.index(column)]
             self.loopdata = tmp_data
             self.loops_status = True
+            os.remove(self.filename)
         except:
             if "No loops retrieved" in str(output):
                 print(output)
@@ -228,13 +259,12 @@ class Plotter():
 
         plx.title(self.arch_name + "  - DRAM BW = "+ str(self.arch_DRAMBW)+ " GB/s")
 
-        plx.plot([self.avgdata["OI"]], [self.avgdata["CPU-GFLOPS"]], color="red",marker='sd',label="JID: " + str(self.avgdata["JOBID"]))
+        plx.plot(self.avgdata["OI"], self.avgdata["CPU-GFLOPS"], color="red",marker='sd',label="JID: " + str(self.avgdata["JOBID"][0]))
 
         #plx.text(x = np.max(H_I)+ 600, y= np.max(NO_SIMD_DP_W) + np.max(NO_SIMD_DP_W) * Ytext_factor, text = "NO SIMD DP = "+ str(round(NO_SIMD_DP_Rpeak,2))+" GFLOPS", fontsize=8)
         plx.text("DRAM BW = "+ str(self.arch_DRAMBW)+ " GB/s", x = np.min(H_I), y = np.mean(H_W) + np.mean(H_W)*0.2)
         plx.ylabel("Performance (GFLOPS)")
         plx.xlabel("Operational Intensity (FLOPS/byte)")
-
         plx.subplot(1,2)
         plx.theme('pro')
 
