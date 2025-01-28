@@ -1,12 +1,9 @@
-#!/usr/bin/python3
-
 import argparse
 import csv
 import re
 from subprocess import Popen, PIPE
 import os
 
-import pdb
 import numpy as np
 import plotext as plx
 
@@ -58,7 +55,7 @@ class Plotter():
 
     def get_architecture_specs(self, data):
 
-        with open("data/architecture_specs.csv") as csvfile:
+        with open("../data/architecture_specs.csv") as csvfile:
             reader = csv.DictReader(csvfile, delimiter=";")
             for row in reader:
                 if row["NAME"] == data['Arch']:
@@ -112,7 +109,7 @@ class Plotter():
 
     def print_architecture_specs(self):
 
-        with open("data/architecture_specs.csv") as csvfile:
+        with open("../data/architecture_specs.csv") as csvfile:
             reader = csv.DictReader(csvfile, delimiter=";")
             for row in reader:
                 for key in row:
