@@ -19,7 +19,7 @@ setup(
     ],
     packages=[PACKAGE_NAME],
     py_modules=[PACKAGE_NAME],
-    package_data={'': ['eacctview/data/*.csv']},
+    include_package_data=True,
     license='MIT',
     long_description=long_descrition,
     long_description_content_type="text/markdown",
