@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 import argparse
 import csv
 import re
@@ -14,6 +16,9 @@ class Plotter():
 
         self.avgdata = {}
         self.loopdata = {}
+
+        self.job_id = None
+        self.step_id = None
 
         self.loops_status=False
         self.loop_metrics = ["AVG_CPUFREQ_KHZ","AVG_IMCFREQ_KHZ","DEF_FREQ_KHZ","CPI","TPI","MEM_GBS","IO_MBS","PERC_MPI","DC_NODE_POWER_W","DRAM_POWER_W","PCK_POWER_W","GFLOPS","L1_MISSES","L2_MISSES","L3_MISSES","SPOPS_SINGLE","SPOPS_128","SPOPS_256","SPOPS_512","DPOPS_SINGLE","DPOPS_128","DPOPS_256","DPOPS_512","TEMP0","TEMP1","TEMP2","TEMP3","GPU0_POWER_W","GPU0_FREQ_KHZ","GPU0_MEM_FREQ_KHZ","GPU0_UTIL_PERC","GPU0_MEM_UTIL_PERC","GPU0_GFLOPS","GPU0_TEMP","GPU0_MEMTEMP","GPU1_POWER_W","GPU1_FREQ_KHZ","GPU1_MEM_FREQ_KHZ","GPU1_UTIL_PERC","GPU1_MEM_UTIL_PERC","GPU1_GFLOPS","GPU1_TEMP","GPU1_MEMTEMP","GPU2_POWER_W","GPU2_FREQ_KHZ","GPU2_MEM_FREQ_KHZ","GPU2_UTIL_PERC","GPU2_MEM_UTIL_PERC","GPU2_GFLOPS","GPU2_TEMP","GPU2_MEMTEMP","GPU3_POWER_W","GPU3_FREQ_KHZ","GPU3_MEM_FREQ_KHZ","GPU3_UTIL_PERC","GPU3_MEM_UTIL_PERC","GPU3_GFLOPS","GPU3_TEMP","GPU3_MEMTEMP","GPU4_POWER_W","GPU4_FREQ_KHZ","GPU4_MEM_FREQ_KHZ","GPU4_UTIL_PERC","GPU4_MEM_UTIL_PERC","GPU4_GFLOPS","GPU4_TEMP","GPU4_MEMTEMP","GPU5_POWER_W","GPU5_FREQ_KHZ","GPU5_MEM_FREQ_KHZ","GPU5_UTIL_PERC","GPU5_MEM_UTIL_PERC","GPU5_GFLOPS","GPU5_TEMP","GPU5_MEMTEMP","GPU6_POWER_W","GPU6_FREQ_KHZ","GPU6_MEM_FREQ_KHZ","GPU6_UTIL_PERC","GPU6_MEM_UTIL_PERC","GPU6_GFLOPS","GPU6_TEMP","GPU6_MEMTEMP","GPU7_POWER_W","GPU7_FREQ_KHZ","GPU7_MEM_FREQ_KHZ","GPU7_UTIL_PERC","GPU7_MEM_UTIL_PERC","GPU7_GFLOPS","GPU7_TEMP","GPU7_MEMTEMP","LOOP_SIZE"]
@@ -40,6 +45,15 @@ class Plotter():
                             }
 
 
+    def get_jobid(self,jobid_from_args):
+
+        if len(jobid_from_args[0].split(".")) == 1:
+            self.job_id = jobid_from_args[0]
+            self.step_id = "0"
+        elif len(jobid_from_args[0].split(".")) == 2:
+            self.job_id = jobid_from_args[0].split(".")[0]
+            self.step_id = jobid_from_args[0].split(".")[1]
+        print("Querying: (jobid,stepid) ("+self.job_id+","+self.step_id+")")
 
 
     def get_architecture_specs(self, data):
@@ -60,17 +74,6 @@ class Plotter():
                     self.arch_HP_RPEAK = self.arch_DP_RPEAK * 4.0
                     # DRAMBW = (bits/bytes) * Mem_freq * N channels * (Mega/Giga)
                     self.arch_DRAMBW = (64./8.) * self.arch_memory_freq * self.arch_memory_channels * (1e6/1e9) 
-
-                    #pdb.set_trace()
-                    #for key in row.keys():
-                    #    if key == "NAME":
-                    #        # skip the NAME since it is already in Arch
-                    #        continue
-                    #    else:
-                    #        try:
-                    #            data[key] = [float(row[key])]
-                    #        except:
-                    #            data[key] = [row[key]]
 
         return(data)
 
@@ -107,6 +110,20 @@ class Plotter():
         return(data)
 
 
+    def print_architecture_specs(self):
+
+        with open("data/architecture_specs.csv") as csvfile:
+            reader = csv.DictReader(csvfile, delimiter=";")
+            for row in reader:
+                for key in row:
+                    print(key+":",row[key])
+                print("DP RPEAK:",round(float(row['NCORES']) * float(row['CPU_FREQ_GHZ']) * float(row['NDPS']),2))
+                print("SP RPEAK:",round(float(row['NCORES']) * float(row['CPU_FREQ_GHZ']) * float(row['NDPS']),2)*2.0)
+                print("HP RPEAK:",round(float(row['NCORES']) * float(row['CPU_FREQ_GHZ']) * float(row['NDPS']),2)*4.0)
+                print("DRAM BW:",round((64./8.) * float(row['MEM_FREQ_MHZ']) * float(row['N_MEM_CHANNELS']) * (1e6/1e9),2))
+                print("-------------------")
+
+
     def print_timeline_metrics(self):
         print(self.loop_metrics)
 
@@ -139,15 +156,15 @@ class Plotter():
         return(tmp_data)
             
 
-    def get_eacct_jobavg(self,jobid,stepid = 0):
+    def get_eacct_jobavg(self):
 
-        self.filename = jobid+"."+str(stepid)+'.csv'
+        self.filename = self.job_id+"."+self.step_id+'.csv'
         try:
             os.remove(self.filename)
         except FileNotFoundError:
             pass
 
-        process = Popen(['eacct','-j',jobid+"."+str(stepid),'-l','-c',self.filename], stdout=PIPE, stderr=PIPE)
+        process = Popen(['eacct','-j',self.job_id+"."+self.step_id,'-l','-c',self.filename], stdout=PIPE, stderr=PIPE)
 
         output, error = process.communicate()
         output = output.decode('ISO-8859-1').strip()
@@ -167,54 +184,29 @@ class Plotter():
         os.remove(self.filename) 
 
 
-    def get_eacct_jobloop(self,jobid,stepid = 0):
+    def get_eacct_jobloop(self):
 
-        self.filename = jobid+"."+str(stepid)+'.csv'
-
+        self.filename = self.job_id+"."+self.step_id+'.csv'
         try:
             os.remove(self.filename)
         except FileNotFoundError:
             pass
 
-        process = Popen(['eacct','-j',jobid+"."+str(stepid),'-r','-c',self.filename], stdout=PIPE, stderr=PIPE)
+        process = Popen(['eacct','-j',self.job_id+"."+self.step_id,'-r','-c',self.filename], stdout=PIPE, stderr=PIPE)
 
         output, error = process.communicate()
         output = output.decode('ISO-8859-1').strip()
         error = error.decode('ISO-8859-1').strip()
-                
-        try:
-            header_list = []
-            values_list = []
-            idx = 0
-            with open(self.filename) as csvfile:
-                reader = csv.reader(csvfile, delimiter=";")
-                for row in reader:
-                    if idx == 0:
-                        header_list = row
-                        idx += 1 # maybe there is better logic here
-                        for i in range(len(header_list)):
-                            values_list.append([])
-                        continue
-                    else:
-                        for i in range(len(row)):
-                            try:
-                                values_list[i].append(float(row[i]))
-                            except:
-                                values_list[i].append(row[i])
-                                    
-            tmp_data = {}
-            for column in header_list:
-                
-                tmp_data[column] = values_list[header_list.index(column)]
+
+
+        if "No loops retrieved" not in error:
+            tmp_data = self.csv_reader()
             self.loopdata = tmp_data
             self.loops_status = True
             os.remove(self.filename)
-        except:
-            if "No loops retrieved" in str(output):
-                print(output)
-            print("Loops not collected my EAR")
-            self.loops_status = False
-
+        else:
+            print(error)
+                
 
     def terminal(self, metrics):
         xmax = 10000 # this arbtrary
@@ -240,29 +232,30 @@ class Plotter():
         plx.xscale('log')
         plx.yscale('log')
 
+
         # Main Memory Line
         plx.scatter(H_I,H_W,color='white', marker="dot")
 
         # CPU Bound Lines
         #plx.plot(np.logspace(np.max(NO_SIMD_DP_I),5e10,len(NO_SIMD_DP_I)),NO_SIMD_DP_Rpeak*np.ones(len(NO_SIMD_DP_I)), c='white', ls = "--")
         plx.scatter(np.geomspace(np.max(D_I)/4.0,xmax,len(D_I)),self.arch_DP_RPEAK*np.ones(len(D_W))/4.0, color='white', marker="dot")
-        plx.text("DP 1/4 Node", x = xmax - xmax*0.99, y = np.max(D_W)/4.0)
-
         plx.scatter(np.geomspace(np.max(D_I),xmax,len(D_I)),self.arch_DP_RPEAK*np.ones(len(D_W)), color='white', marker="dot")
-        plx.text("DP Rpeak = "+ str(round(self.arch_DP_RPEAK,2)), x = xmax - xmax*0.99, y = np.max(D_W))
-
         plx.scatter(np.geomspace(np.max(S_I),xmax,len(S_I)),self.arch_SP_RPEAK*np.ones(len(S_W)), color='white', marker="dot")
-        plx.text("SP Rpeak = "+ str(round(self.arch_SP_RPEAK,2)), x = xmax - xmax*0.99, y = np.max(S_W))
-        
         plx.scatter(np.geomspace(np.max(H_I),xmax,len(H_I)),self.arch_HP_RPEAK*np.ones(len(H_W)), color='white', marker="dot")
-        plx.text("HP Rpeak = "+ str(round(self.arch_HP_RPEAK,2)), x = xmax - xmax*0.99, y = np.max(H_W))
+        
+        plx.text("HP", np.max(H_I) - np.max(H_I)*0.6, y = np.max(H_W))
+        plx.text("SP", np.max(S_I) - np.max(S_I)*0.6, y = np.max(S_W))
+        plx.text("DP", np.max(D_I) - np.max(D_I)*0.6, y = np.max(D_W))
+        plx.text("DP 1/4 Node", np.max(D_I)/4.0 - np.max(D_I)/4.0 *0.9, y = np.max(D_W)/4.0)
+        #plx.text("DRAM BW = "+ str(self.arch_DRAMBW)+ " GB/s", x = np.min(H_I), y = np.mean(H_W) + np.mean(H_W)*0.2)
 
         plx.title(self.arch_name + "  - DRAM BW = "+ str(self.arch_DRAMBW)+ " GB/s")
 
-        plx.plot(self.avgdata["OI"], self.avgdata["CPU-GFLOPS"], color="red",marker='sd',label="JID: " + str(self.avgdata["JOBID"][0]))
+        #pdb.set_trace()
+        plx.plot(self.avgdata["OI"], self.avgdata["CPU-GFLOPS"], color="red",marker='sd',label="JID: " + str(int(self.avgdata["JOBID"][0])) + "." +str(int(self.avgdata["STEPID"][0])))
+
 
         #plx.text(x = np.max(H_I)+ 600, y= np.max(NO_SIMD_DP_W) + np.max(NO_SIMD_DP_W) * Ytext_factor, text = "NO SIMD DP = "+ str(round(NO_SIMD_DP_Rpeak,2))+" GFLOPS", fontsize=8)
-        plx.text("DRAM BW = "+ str(self.arch_DRAMBW)+ " GB/s", x = np.min(H_I), y = np.mean(H_W) + np.mean(H_W)*0.2)
         plx.ylabel("Performance (GFLOPS)")
         plx.xlabel("Operational Intensity (FLOPS/byte)")
         plx.subplot(1,2)
@@ -292,22 +285,27 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-j", "--jobid", metavar="JobID", help="Plot Roofline and Timeline from eacct tool", type=str, nargs=1)
     parser.add_argument("--metrics", metavar="Metrics", help="Metrics to plot timeline", default = ["CPI", "MEM_GBS", "GFLOPS"], type=str, nargs='+', required=False)
-    parser.add_argument("--list", action='store_true', help="List available metrics to plot timeline", required=False)
+    parser.add_argument("--list-metrics", action='store_true', help="List available metrics to plot timeline", required=False)
+    parser.add_argument("--list-architectures", action='store_true', help="List the specs for the available archs", required=False)
     
     args = parser.parse_args()
 
     plotter = Plotter()
 
-    if args.list:
+    if args.list_architectures:
+        plotter.print_architecture_specs()
+        exit(1)
+
+    if args.list_metrics:
         plotter.print_timeline_metrics()
         exit(1)
+
     if args.jobid:
-        plotter.get_eacct_jobavg(args.jobid[0])
-        plotter.get_eacct_jobloop(args.jobid[0])
+        plotter.get_jobid(args.jobid)
+        plotter.get_eacct_jobavg()
+        plotter.get_eacct_jobloop()
         plotter.terminal(args.metrics)
 
-    #plotter.roofline()
-    #plotter.timeline()
 
 
 
