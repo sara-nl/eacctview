@@ -35,7 +35,3 @@ Pass it a jobid and stepid of a job that you ran with the EAR runtime library en
 ```
 eacctview -j 9572777.1
 ```
-
-And you will get something like this...
-
-<img src="img/eacct_view_example.png"/>
