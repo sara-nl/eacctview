@@ -11,9 +11,15 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
 ]
-license = "MIT"
-license-files = ["LICEN[CS]E*"]
+
+dependencies = [
+    "plotext>=5.2.8",
+    "numpy>=1.20.1",
+]
 
 [project.urls]
-Homepage = "https://github.com/sara-nl/eacct-view"
-Issues = "https://github.com/sara-nl/eacct-view/issues"
+Homepage = "https://github.com/sara-nl/eacctview"
+Issues = "https://github.com/sara-nl/eacctview/issues"
+
+[tool.setuptools]
+packages = ["eacctview"]
