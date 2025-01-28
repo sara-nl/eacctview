@@ -15,11 +15,11 @@ def main():
 
     if args.list_architectures:
         plotter.print_architecture_specs()
-        exit(1)
+        exit(0)
 
     if args.list_metrics:
         plotter.print_timeline_metrics()
-        exit(1)
+        exit(0)
 
     if args.jobid:
         plotter.get_jobid(args.jobid)
