@@ -1,6 +1,8 @@
 # eacct-view
 Terminal plotting tool for energy aware runtime (EAR)
 
+<img src="img/eacct_view_example.png"/>
+
 ## Build instructions
 
 ```
