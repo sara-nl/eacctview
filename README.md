@@ -16,7 +16,6 @@ pip install .
 
 ## Usage
 ```
-$ eacctview.py
 usage: eacctview [-h] [-j JobID] [--metrics Metrics [Metrics ...]] [--list-metrics] [--list-architectures]
 
 optional arguments:
