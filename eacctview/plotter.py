@@ -3,6 +3,7 @@ import re
 from subprocess import Popen, PIPE
 import os
 
+import pdb
 import numpy as np
 import plotext as plx
 
@@ -150,8 +151,32 @@ class Plotter():
             
             tmp_data[column] = values_list[header_list.index(column)]
         
+
+        self.check_eacct_data(tmp_data)
         return(tmp_data)
-            
+    
+    def check_eacct_data(self,tmp_data):
+        # check if policy is enabled
+        if (len(self.avgdata) == 0):
+            for policy in tmp_data['POLICY']:
+                if policy == "NP":
+                    print("Did not enable an EAR policy.")
+                    print("No Application metrics can be found/displayed.")
+                    print("Resubmit your job with:")
+                    print("#SBATCH --ear=on")
+                    print("#SBATCH --ear-policy=monitoring/min_time/min_energy")
+                    exit(1)
+
+        # check if actual metrics were found for the job
+        for mem in tmp_data['MEM_GBS']:
+            index = tmp_data['MEM_GBS'].index(mem)
+            if (mem == 0.0) and (tmp_data['CPI'][index] == 0.0):
+                print("EARL Enabled with a policy BUT no metrics found!!!")
+                print("THIS IS WEIRD THERE SHOULD BE")
+                print("Something went wrong with the job or DB")
+                print("Check the command eacct -j JOBID to see whats going on.")
+                exit(1)
+
 
     def get_eacct_jobavg(self):
 
@@ -161,16 +186,26 @@ class Plotter():
         except FileNotFoundError:
             pass
 
-        process = Popen(['eacct','-j',self.job_id+"."+self.step_id,'-l','-c',self.filename], stdout=PIPE, stderr=PIPE)
 
-        output, error = process.communicate()
-        output = output.decode('ISO-8859-1').strip()
-        error = error.decode('ISO-8859-1').strip()
-
-        if "No jobs found" in str(output):
-            print(output)
-            exit(1)
+        try:
+            process = Popen(['eacct','-j',self.job_id+"."+self.step_id,'-l','-c',self.filename], stdout=PIPE, stderr=PIPE)
         
+            output, error = process.communicate()
+            output = output.decode('ISO-8859-1').strip()
+            error = error.decode('ISO-8859-1').strip()
+
+        except FileNotFoundError:
+            print("eacct command not found.")
+            print("You need to load the ear module or install the eacct tool....")
+            exit(1)
+
+        if 'No jobs found' in error:
+            print("Could not find job step from eacct.")
+            print("You probably did not enable the EARL.")
+            print("Check the command eacct -j JOBID to see if there exists any job steps..")
+            exit(1)
+
+
         tmp_data = self.csv_reader()
         tmp_data = self.get_partition(tmp_data)
         tmp_data = self.get_architecture_specs(tmp_data)
@@ -248,7 +283,6 @@ class Plotter():
 
         plx.title(self.arch_name + "  - DRAM BW = "+ str(self.arch_DRAMBW)+ " GB/s")
 
-        #pdb.set_trace()
         plx.plot(self.avgdata["OI"], self.avgdata["CPU-GFLOPS"], color="red",marker='sd',label="JID: " + str(int(self.avgdata["JOBID"][0])) + "." +str(int(self.avgdata["STEPID"][0])))
 
 
