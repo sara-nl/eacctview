@@ -238,9 +238,24 @@ class Plotter():
             os.remove(self.filename)
         else:
             print(error)
-                
 
-    def terminal(self, metrics):
+    def var_vs_var(self,plx,vars):
+            xvar =  vars[0]
+            yvar =  vars[1]
+
+            plx.subplot(1, 1)
+            plx.theme("pro")
+            plx.plotsize(70, 100)
+            
+            plx.plot(self.avgdata[xvar], self.avgdata[yvar], color="red", marker='sd',label="JID: " + str(int(self.avgdata["JOBID"][0])) + "." +str(int(self.avgdata["STEPID"][0])))
+            plx.ylabel(yvar)
+            plx.xlabel(xvar)
+            plx.xlim(0,100)
+            plx.ylim(0,100)     
+
+
+    def roofline(self,plx):
+
         xmax = 10000 # this arbtrary
 
         # get other Precisions
@@ -249,65 +264,71 @@ class Plotter():
         D_W = np.geomspace(1./(self.arch_ncores*100),1.0,100) *self.arch_DP_RPEAK # this is calculated for the full node
         S_W = np.geomspace(1./(self.arch_ncores*100),1.0,100) *self.arch_SP_RPEAK # this is calculated for the full node
         H_W = np.geomspace(1./(self.arch_ncores*100),1.0,100) *self.arch_HP_RPEAK # this is calculated for the full node
-        
+    
         # Operation Intensity (Flops/Byte)
         #NO_SIMD_DP_I = NO_SIMD_DP_W/DRAMBW
         D_I = D_W/self.arch_DRAMBW
         S_I = S_W/self.arch_DRAMBW
         H_I = H_W/self.arch_DRAMBW
 
-        plx.clf()
-        plx.subplots(1, 2)
         plx.subplot(1, 1)
         plx.theme("pro")
         plx.plotsize(70, 100)
         plx.xscale('log')
         plx.yscale('log')
 
-
         # Main Memory Line
         plx.scatter(H_I,H_W,color='white', marker="dot")
 
         # CPU Bound Lines
-        #plx.plot(np.logspace(np.max(NO_SIMD_DP_I),5e10,len(NO_SIMD_DP_I)),NO_SIMD_DP_Rpeak*np.ones(len(NO_SIMD_DP_I)), c='white', ls = "--")
         plx.scatter(np.geomspace(np.max(D_I)/4.0,xmax,len(D_I)),self.arch_DP_RPEAK*np.ones(len(D_W))/4.0, color='white', marker="dot")
         plx.scatter(np.geomspace(np.max(D_I),xmax,len(D_I)),self.arch_DP_RPEAK*np.ones(len(D_W)), color='white', marker="dot")
         plx.scatter(np.geomspace(np.max(S_I),xmax,len(S_I)),self.arch_SP_RPEAK*np.ones(len(S_W)), color='white', marker="dot")
         plx.scatter(np.geomspace(np.max(H_I),xmax,len(H_I)),self.arch_HP_RPEAK*np.ones(len(H_W)), color='white', marker="dot")
-        
         plx.text("HP", np.max(H_I) - np.max(H_I)*0.6, y = np.max(H_W))
         plx.text("SP", np.max(S_I) - np.max(S_I)*0.6, y = np.max(S_W))
         plx.text("DP", np.max(D_I) - np.max(D_I)*0.6, y = np.max(D_W))
         plx.text("DP 1/4 Node", np.max(D_I)/4.0 - np.max(D_I)/4.0 *0.9, y = np.max(D_W)/4.0)
-        #plx.text("DRAM BW = "+ str(self.arch_DRAMBW)+ " GB/s", x = np.min(H_I), y = np.mean(H_W) + np.mean(H_W)*0.2)
+        
+        plx.plot(self.avgdata["OI"], self.avgdata["CPU-GFLOPS"], color="red",marker='sd',label="JID: " + str(int(self.avgdata["JOBID"][0])) + "." +str(int(self.avgdata["STEPID"][0])))
+        #plx.text(x = np.max(H_I)+ 600, y= np.max(NO_SIMD_DP_W) + np.max(NO_SIMD_DP_W) * Ytext_factor, text = "NO SIMD DP = "+ str(round(NO_SIMD_DP_Rpeak,2))+" GFLOPS", fontsize=8)
 
         plx.title(self.arch_name + "  - DRAM BW = "+ str(self.arch_DRAMBW)+ " GB/s")
-
-        plx.plot(self.avgdata["OI"], self.avgdata["CPU-GFLOPS"], color="red",marker='sd',label="JID: " + str(int(self.avgdata["JOBID"][0])) + "." +str(int(self.avgdata["STEPID"][0])))
-
-
-        #plx.text(x = np.max(H_I)+ 600, y= np.max(NO_SIMD_DP_W) + np.max(NO_SIMD_DP_W) * Ytext_factor, text = "NO SIMD DP = "+ str(round(NO_SIMD_DP_Rpeak,2))+" GFLOPS", fontsize=8)
         plx.ylabel("Performance (GFLOPS)")
         plx.xlabel("Operational Intensity (FLOPS/byte)")
-        plx.subplot(1,2)
-        plx.theme('pro')
+
+    def timelines(self,plx,metrics):
+
+        plx.subplot(1,2).subplots(len(metrics), 1)
+        plx.theme("pro")
+        
+        for metric in metrics:
+            plot_index = metrics.index(metric) 
+            plx.subplot(1,2).subplot(plot_index +1 , 1)
+            plx.scatter(self.loopdata["TIMESTAMP"], self.loopdata[metric],color='red',marker='dot')
+            plx.ylabel(metric)
+            
+        plx.xlabel("Time (s)")
+
+
+
+    def terminal(self, metrics, xvy_metrics=None):
+
+        plx.clf()
+        plx.subplots(1, 2)
+
+        if xvy_metrics is None:
+            self.roofline(plx)
+        else:
+            self.var_vs_var(plx, xvy_metrics)
 
         if self.loops_status:
-
-            plx.subplot(1,2).subplots(len(metrics), 1)
-            
-            for metric in metrics:
-                plot_index = metrics.index(metric) 
-                plx.subplot(1,2).subplot(plot_index +1 , 1)
-                plx.scatter(self.loopdata["TIMESTAMP"], self.loopdata[metric],color='red',marker='dot')
-                plx.ylabel(metric)
-                
-                #plx.ylim(0,1)
-            plx.xlabel("Time (s)")
-
+            self.timelines(plx,metrics)
         else:
             plx.text("EAR LOOPS NOT ACTIVATED.\nRe-run your job with `export EARL_REPORT_LOOPS=1`",x=-0.5,y=0)
             plx.xlim(-1,1)
+
+
         plx.show()
 
 
