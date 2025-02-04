@@ -325,6 +325,8 @@ class Plotter():
         if self.loops_status:
             self.timelines(plx,metrics)
         else:
+            plx.subplot(1,2)
+            plx.theme("pro")
             plx.text("EAR LOOPS NOT ACTIVATED.\nRe-run your job with `export EARL_REPORT_LOOPS=1`",x=-0.5,y=0)
             plx.xlim(-1,1)
 
