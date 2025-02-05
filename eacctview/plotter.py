@@ -3,7 +3,6 @@ import re
 from subprocess import Popen, PIPE
 import os
 
-import pdb
 import numpy as np
 import plotext as plx
 
@@ -100,7 +99,7 @@ class Plotter():
             data['Arch'] = "AMD Genoa 9654 (2x)"
         elif (node_type == "gcn") & (node_number <= 72):
             data['Arch'] = "Intel Xeon Platinum 8360Y (2x)"
-        elif (node_type == "tcn") & (node_number > 72):
+        elif (node_type == "gcn") & (node_number > 72):
             data['Arch'] = "AMD EPYC 9334 32-Core Processor (2x)"
         else:
             data['Arch'] = "UNK"
