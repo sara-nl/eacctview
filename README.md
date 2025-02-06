@@ -18,13 +18,15 @@ pip install .
 
 ## Usage
 ```
-usage: eacctview [-h] [-j JobID] [--metrics Metrics [Metrics ...]] [--list-metrics] [--list-architectures]
+usage: eacctview [-h] [-j JobID] [--xvy-metrics METRIC_STRING METRIC_STRING] [--time-metrics METRIC_STRING/S [METRIC_STRING/S ...]] [--list-metrics] [--list-architectures]
 
 optional arguments:
   -h, --help            show this help message and exit
   -j JobID, --jobid JobID
                         Plot Roofline and Timeline from eacct tool
-  --metrics Metrics [Metrics ...]
+  --xvy-metrics METRIC_STRING METRIC_STRING
+                        2D metric v metric plot
+  --time-metrics METRIC_STRING/S [METRIC_STRING/S ...]
                         Metrics to plot timeline
   --list-metrics        List available metrics to plot timeline
   --list-architectures  List the specs for the available archs
