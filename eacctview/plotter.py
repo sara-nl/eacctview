@@ -2,6 +2,8 @@ import csv
 import re
 from subprocess import Popen, PIPE
 import os
+import datetime
+import pdb
 
 import numpy as np
 import plotext as plx
@@ -33,13 +35,16 @@ class Plotter():
         self.arch_DRAMBW = None 
 
         # Color Palettes
-        self.arch_palette ={"Rome": "tab:blue",
-                            "Genoa": "tab:orange",
-                            "A100": "tab:green",
-                            "H100": "tab:red",
-                            "Fat_Rome": "tab:purple",
-                            "Fat_Genoa": "tab:brown"
-                            }
+        self.arch_palette = {
+            "Rome": "tab:blue",
+            "Genoa": "tab:orange",
+            "A100": "tab:green",
+            "H100": "tab:red",
+            "Fat_Rome": "tab:purple",
+            "Fat_Genoa": "tab:brown"
+            }
+
+    
 
 
     def get_jobid(self,jobid_from_args):
@@ -66,6 +71,7 @@ class Plotter():
                     self.arch_NDPs = float(row['NDPS'])
                     self.arch_memory_freq = float(row['MEM_FREQ_MHZ'])
                     self.arch_memory_channels = float(row['N_MEM_CHANNELS'])
+                    self.arch_power = float(row["MAX_POWER_W"])
                     self.arch_DP_RPEAK = self.arch_ncores * self.arch_freq * self.arch_NDPs
                     self.arch_SP_RPEAK = self.arch_DP_RPEAK * 2.0
                     self.arch_HP_RPEAK = self.arch_DP_RPEAK * 4.0
@@ -238,6 +244,37 @@ class Plotter():
         else:
             print(error)
 
+    def get_metric_lims(self,metric):
+
+        if metric == "CPI":
+            min = 0.0
+            max = 2.0
+        elif metric == "MEM_GBS":
+            min = 0.0
+            max = self.arch_DRAMBW
+        elif metric == "PERC_MPI":
+            min = 0
+            max = 100
+        elif metric == "DC_NODE_POWER_W":
+            min = 0
+            max = self.arch_power + self.arch_power*0.1
+        elif metric == "PCK_POWER_W":
+            min = 0
+            max = self.arch_power
+        elif "PERC" in metric:
+            min = 0
+            max = 100
+        elif "FREQ_KHZ" in metric:
+            min = 0
+            max = self.arch_freq + self.arch_freq * 0.1
+
+        else:
+            min = None
+            max= None
+        
+        return(min,max)
+
+
     def var_vs_var(self,plx,vars):
             xvar =  vars[0]
             yvar =  vars[1]
@@ -249,8 +286,18 @@ class Plotter():
             plx.plot(self.avgdata[xvar], self.avgdata[yvar], color="red", marker='sd',label="JID: " + str(int(self.avgdata["JOBID"][0])) + "." +str(int(self.avgdata["STEPID"][0])))
             plx.ylabel(yvar)
             plx.xlabel(xvar)
-            plx.xlim(0,100)
-            plx.ylim(0,100)     
+
+            xmin,xmax = self.get_metric_lims(xvar)
+            ymin,ymax = self.get_metric_lims(yvar)
+            
+            if (ymin != None) and (ymax !=None):
+                plx.ylim(ymin,ymax)
+            else:
+                plx.ylim(0,100)     
+            if (xmin != None) and (xmax !=None):
+                plx.xlim(xmin,xmax)
+            else:
+                plx.xlim(0,100)     
 
 
     def roofline(self,plx):
@@ -300,12 +347,32 @@ class Plotter():
 
         plx.subplot(1,2).subplots(len(metrics), 1)
         plx.theme("pro")
-        
+
+        # Create a NumPy array of raw seconds
+        seconds_array = self.loopdata["TIMESTAMP"] - np.min(self.loopdata["TIMESTAMP"]) 
+        ## Convert to timedelta64
+        #time_deltas = np.timedelta64(1, 's') * seconds_array
+        ## Extract hours, minutes, and seconds using vectorized operations
+        #hours = time_deltas.astype('timedelta64[h]').astype(int)
+        #minutes = (time_deltas - np.timedelta64(1, 'h') * hours).astype('timedelta64[m]').astype(int)
+        #seconds = (time_deltas - np.timedelta64(1, 'h') * hours - np.timedelta64(1, 'm') * minutes).astype('timedelta64[s]').astype(int)
+        ## Format the output as HH:MM:SS using vectorized string operations
+        #formatted_time = np.char.add(np.char.add(np.char.zfill(hours.astype(str), 2), ':'),
+        #                            np.char.add(np.char.zfill(minutes.astype(str), 2), ':'))
+        #formatted_time = np.char.add(formatted_time, np.char.zfill(seconds.astype(str), 2))
+        #formatted_time = formatted_time.tolist()
+
         for metric in metrics:
             plot_index = metrics.index(metric) 
             plx.subplot(1,2).subplot(plot_index +1 , 1)
-            plx.scatter(self.loopdata["TIMESTAMP"], self.loopdata[metric],color='red',marker='dot')
+            plx.scatter(seconds_array, self.loopdata[metric],color='red',marker='dot')
+            
+            ymin,ymax = self.get_metric_lims(metric)
+            if (ymin != None) and (ymax !=None):
+                plx.ylim(ymin,ymax)
+
             plx.ylabel(metric)
+            
             
         plx.xlabel("Time (s)")
 
