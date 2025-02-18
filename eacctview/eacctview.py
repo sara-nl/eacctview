@@ -1,10 +1,12 @@
 from eacctview.plotter import Plotter
 import argparse
+import pdb
 
 def main():
     
     parser = argparse.ArgumentParser()
     parser.add_argument("-j", "--jobid", metavar="JobID", help="Plot Roofline and Timeline from eacct tool", type=str, nargs=1)
+    parser.add_argument("-c", "--csv", metavar="csv", help="Plot Roofline and Timeline from csvfile", type=str, nargs=1)
     parser.add_argument("--xvy-metrics", metavar="METRIC_STRING", help="2D metric v metric plot", default = [], type=str, nargs=2, required=False)
     parser.add_argument("--time-metrics", metavar="METRIC_STRING/S", help="Metrics to plot timeline", default = ["CPI", "MEM_GBS", "GFLOPS"], type=str, nargs='+', required=False)
     parser.add_argument("--list-metrics", action='store_true', help="List available metrics to plot timeline", required=False)
@@ -26,6 +28,14 @@ def main():
         plotter.get_jobid(args.jobid)
         plotter.get_eacct_jobavg()
         plotter.get_eacct_jobloop()
+
+        if args.xvy_metrics:
+            plotter.terminal(args.time_metrics, args.xvy_metrics)
+        else:
+            plotter.terminal(args.time_metrics)
+
+    if args.csv:
+        plotter.get_eacct_from_csv(filename=args.csv[0])
 
         if args.xvy_metrics:
             plotter.terminal(args.time_metrics, args.xvy_metrics)

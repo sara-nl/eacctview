@@ -2,8 +2,6 @@ import csv
 import re
 from subprocess import Popen, PIPE
 import os
-import datetime
-import pdb
 
 import numpy as np
 import plotext as plx
@@ -135,6 +133,7 @@ class Plotter():
         header_list = []
         values_list = []
         idx = 0
+
         with open(self.filename) as csvfile:
             reader = csv.reader(csvfile, delimiter=";")
             for row in reader:
@@ -156,13 +155,12 @@ class Plotter():
             
             tmp_data[column] = values_list[header_list.index(column)]
         
-
         self.check_eacct_data(tmp_data)
         return(tmp_data)
     
     def check_eacct_data(self,tmp_data):
         # check if policy is enabled
-        if (len(self.avgdata) == 0):
+        if (len(self.avgdata) == 0) and ('POLICY' in tmp_data.keys()):
             for policy in tmp_data['POLICY']:
                 if policy == "NP":
                     print("Did not enable an EAR policy.")
@@ -181,6 +179,27 @@ class Plotter():
                 print("Something went wrong with the job or DB")
                 print("Check the command eacct -j JOBID to see whats going on.")
                 exit(1)
+
+    def get_eacct_from_csv(self, filename):
+
+        self.filename = filename
+        tmp_data = self.csv_reader()
+        tmp_data = self.get_partition(tmp_data)
+        tmp_data = self.get_architecture_specs(tmp_data)
+
+
+        # This is a bit of a hack
+        # because csv can be created in multiple ways aparently
+        if "LOOPID" in tmp_data.keys():
+            self.loopdata = tmp_data
+            tmp_data['OI'] = [sum(tmp_data['GFLOPS'])/len(tmp_data['GFLOPS'])/sum(tmp_data['MEM_GBS'])/len(tmp_data['MEM_GBS'])]
+            tmp_data["CPU-GFLOPS"] = [sum(tmp_data['GFLOPS'])/len(tmp_data['GFLOPS'])] # again disparity in data
+            self.avgdata = tmp_data
+            self.loops_status = True
+
+        else:
+            tmp_data['OI'] = [tmp_data['CPU-GFLOPS'][0]/tmp_data['MEM_GBS'][0]]
+            self.avgdata = tmp_data
 
 
     def get_eacct_jobavg(self):
@@ -337,6 +356,7 @@ class Plotter():
         plx.text("DP 1/4 Node", np.max(D_I)/4.0 - np.max(D_I)/4.0 *0.9, y = np.max(D_W)/4.0)
         
         plx.plot(self.avgdata["OI"], self.avgdata["CPU-GFLOPS"], color="red",marker='sd',label="JID: " + str(int(self.avgdata["JOBID"][0])) + "." +str(int(self.avgdata["STEPID"][0])))
+
         #plx.text(x = np.max(H_I)+ 600, y= np.max(NO_SIMD_DP_W) + np.max(NO_SIMD_DP_W) * Ytext_factor, text = "NO SIMD DP = "+ str(round(NO_SIMD_DP_Rpeak,2))+" GFLOPS", fontsize=8)
 
         plx.title(self.arch_name + "  - DRAM BW = "+ str(self.arch_DRAMBW)+ " GB/s")
