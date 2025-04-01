@@ -13,8 +13,7 @@ class Plotter():
         self.avgdata = {}
         self.loopdata = {}
 
-        self.job_id = None
-        self.step_id = None
+        self.job_ids = []
 
         self.loops_status=False
         self.loop_metrics = ["AVG_CPUFREQ_KHZ","AVG_IMCFREQ_KHZ","DEF_FREQ_KHZ","CPI","TPI","MEM_GBS","IO_MBS","PERC_MPI","DC_NODE_POWER_W","DRAM_POWER_W","PCK_POWER_W","GFLOPS","L1_MISSES","L2_MISSES","L3_MISSES","SPOPS_SINGLE","SPOPS_128","SPOPS_256","SPOPS_512","DPOPS_SINGLE","DPOPS_128","DPOPS_256","DPOPS_512","TEMP0","TEMP1","TEMP2","TEMP3","GPU0_POWER_W","GPU0_FREQ_KHZ","GPU0_MEM_FREQ_KHZ","GPU0_UTIL_PERC","GPU0_MEM_UTIL_PERC","GPU0_GFLOPS","GPU0_TEMP","GPU0_MEMTEMP","GPU1_POWER_W","GPU1_FREQ_KHZ","GPU1_MEM_FREQ_KHZ","GPU1_UTIL_PERC","GPU1_MEM_UTIL_PERC","GPU1_GFLOPS","GPU1_TEMP","GPU1_MEMTEMP","GPU2_POWER_W","GPU2_FREQ_KHZ","GPU2_MEM_FREQ_KHZ","GPU2_UTIL_PERC","GPU2_MEM_UTIL_PERC","GPU2_GFLOPS","GPU2_TEMP","GPU2_MEMTEMP","GPU3_POWER_W","GPU3_FREQ_KHZ","GPU3_MEM_FREQ_KHZ","GPU3_UTIL_PERC","GPU3_MEM_UTIL_PERC","GPU3_GFLOPS","GPU3_TEMP","GPU3_MEMTEMP","GPU4_POWER_W","GPU4_FREQ_KHZ","GPU4_MEM_FREQ_KHZ","GPU4_UTIL_PERC","GPU4_MEM_UTIL_PERC","GPU4_GFLOPS","GPU4_TEMP","GPU4_MEMTEMP","GPU5_POWER_W","GPU5_FREQ_KHZ","GPU5_MEM_FREQ_KHZ","GPU5_UTIL_PERC","GPU5_MEM_UTIL_PERC","GPU5_GFLOPS","GPU5_TEMP","GPU5_MEMTEMP","GPU6_POWER_W","GPU6_FREQ_KHZ","GPU6_MEM_FREQ_KHZ","GPU6_UTIL_PERC","GPU6_MEM_UTIL_PERC","GPU6_GFLOPS","GPU6_TEMP","GPU6_MEMTEMP","GPU7_POWER_W","GPU7_FREQ_KHZ","GPU7_MEM_FREQ_KHZ","GPU7_UTIL_PERC","GPU7_MEM_UTIL_PERC","GPU7_GFLOPS","GPU7_TEMP","GPU7_MEMTEMP","LOOP_SIZE"]
@@ -45,15 +44,17 @@ class Plotter():
     
 
 
-    def get_jobid(self,jobid_from_args):
+    def get_jobid(self,jobids_from_args):
+        """
+        gets the jobid/s (with corresponding stepid)
+        Defaults step id = 0 if non is specified
+        """
+        for jobid in jobids_from_args:
+            if len(jobid.split(".")) == 1:
+                self.job_ids.append(jobid + ".0")
+            elif len(jobid.split(".")) == 2:
+                self.job_ids.append(jobid)
 
-        if len(jobid_from_args[0].split(".")) == 1:
-            self.job_id = jobid_from_args[0]
-            self.step_id = "0"
-        elif len(jobid_from_args[0].split(".")) == 2:
-            self.job_id = jobid_from_args[0].split(".")[0]
-            self.step_id = jobid_from_args[0].split(".")[1]
-        print("Querying: (jobid,stepid) ("+self.job_id+","+self.step_id+")")
 
 
     def get_architecture_specs(self, data):
@@ -203,65 +204,73 @@ class Plotter():
 
 
     def get_eacct_jobavg(self):
+        '''
+        get the average job statistics from eacct
+        '''
 
-        self.filename = self.job_id+"."+self.step_id+'.csv'
-        try:
-            os.remove(self.filename)
-        except FileNotFoundError:
-            pass
+        for jobid in self.job_ids:
+            self.filename = jobid+'.csv'
+            try:
+                os.remove(self.filename)
+            except FileNotFoundError:
+                pass
 
 
-        try:
-            process = Popen(['eacct','-j',self.job_id+"."+self.step_id,'-l','-c',self.filename], stdout=PIPE, stderr=PIPE)
+            try:
+                print("Querying jobavg: (jobid.stepid): ("+jobid+")")
+                process = Popen(['eacct','-j',jobid,'-l','-c',self.filename], stdout=PIPE, stderr=PIPE)
         
-            output, error = process.communicate()
-            output = output.decode('ISO-8859-1').strip()
-            error = error.decode('ISO-8859-1').strip()
+                output, error = process.communicate()
+                output = output.decode('ISO-8859-1').strip()
+                error = error.decode('ISO-8859-1').strip()
 
-        except FileNotFoundError:
-            print("eacct command not found.")
-            print("You need to load the ear module or install the eacct tool....")
-            exit(1)
+            except FileNotFoundError:
+                print("eacct command not found.")
+                print("You need to load the ear module or install the eacct tool....")
+                exit(1)
 
-        if 'No jobs found' in error:
-            print("Could not find job step from eacct.")
-            print("You probably did not enable the EARL.")
-            print("Check the command eacct -j JOBID to see if there exists any job steps..")
-            exit(1)
+            if 'No jobs found' in error:
+                print("Could not find job step from eacct.")
+                print("You probably did not enable the EARL.")
+                print("Check the command eacct -j JOBID to see if there exists any job steps..")
+                exit(1)
 
 
-        tmp_data = self.csv_reader()
-        tmp_data = self.get_partition(tmp_data)
-        tmp_data = self.get_architecture_specs(tmp_data)
+            tmp_data = self.csv_reader()
+            tmp_data = self.get_partition(tmp_data)
+            tmp_data = self.get_architecture_specs(tmp_data)
 
-        tmp_data['OI'] = [tmp_data['CPU-GFLOPS'][0]/tmp_data['MEM_GBS'][0]]
+            tmp_data['OI'] = [tmp_data['CPU-GFLOPS'][0]/tmp_data['MEM_GBS'][0]]
         
-        self.avgdata = tmp_data
-        os.remove(self.filename) 
+            self.avgdata[jobid] = tmp_data
+
+            os.remove(self.filename) 
 
 
     def get_eacct_jobloop(self):
 
-        self.filename = self.job_id+"."+self.step_id+'.csv'
-        try:
-            os.remove(self.filename)
-        except FileNotFoundError:
-            pass
+        for jobid in self.job_ids:
+            self.filename = jobid + '.csv'
+            try:
+                os.remove(self.filename)
+            except FileNotFoundError:
+                pass
 
-        process = Popen(['eacct','-j',self.job_id+"."+self.step_id,'-r','-c',self.filename], stdout=PIPE, stderr=PIPE)
+            print("Querying jobloop: (jobid.stepid): ("+jobid+")")
+            process = Popen(['eacct','-j',jobid,'-r','-c',self.filename], stdout=PIPE, stderr=PIPE)
 
-        output, error = process.communicate()
-        output = output.decode('ISO-8859-1').strip()
-        error = error.decode('ISO-8859-1').strip()
+            output, error = process.communicate()
+            output = output.decode('ISO-8859-1').strip()
+            error = error.decode('ISO-8859-1').strip()
 
 
-        if "No loops retrieved" not in error:
-            tmp_data = self.csv_reader()
-            self.loopdata = tmp_data
-            self.loops_status = True
-            os.remove(self.filename)
-        else:
-            print(error)
+            if "No loops retrieved" not in error:
+                tmp_data = self.csv_reader()
+                self.loopdata[jobid] = tmp_data
+                self.loops_status = True
+                os.remove(self.filename)
+            else:
+                print(error)
 
     def get_metric_lims(self,metric):
 
@@ -355,7 +364,8 @@ class Plotter():
         plx.text("DP", np.max(D_I) - np.max(D_I)*0.6, y = np.max(D_W))
         plx.text("DP 1/4 Node", np.max(D_I)/4.0 - np.max(D_I)/4.0 *0.9, y = np.max(D_W)/4.0)
         
-        plx.plot(self.avgdata["OI"], self.avgdata["CPU-GFLOPS"], color="red",marker='sd',label="JID: " + str(int(self.avgdata["JOBID"][0])) + "." +str(int(self.avgdata["STEPID"][0])))
+        for jobid in self.job_ids:
+            plx.plot(self.avgdata[jobid]["OI"], self.avgdata[jobid]["CPU-GFLOPS"],marker='sd',label="JID: " + str(self.avgdata[jobid]["JOBID"][0]))
 
         #plx.text(x = np.max(H_I)+ 600, y= np.max(NO_SIMD_DP_W) + np.max(NO_SIMD_DP_W) * Ytext_factor, text = "NO SIMD DP = "+ str(round(NO_SIMD_DP_Rpeak,2))+" GFLOPS", fontsize=8)
 
@@ -368,8 +378,6 @@ class Plotter():
         plx.subplot(1,2).subplots(len(metrics), 1)
         plx.theme("pro")
 
-        # Create a NumPy array of raw seconds
-        seconds_array = self.loopdata["TIMESTAMP"] - np.min(self.loopdata["TIMESTAMP"]) 
         ## Convert to timedelta64
         #time_deltas = np.timedelta64(1, 's') * seconds_array
         ## Extract hours, minutes, and seconds using vectorized operations
@@ -383,15 +391,19 @@ class Plotter():
         #formatted_time = formatted_time.tolist()
 
         for metric in metrics:
-            plot_index = metrics.index(metric) 
-            plx.subplot(1,2).subplot(plot_index +1 , 1)
-            plx.scatter(seconds_array, self.loopdata[metric],color='red',marker='dot')
+            for jobid in self.job_ids:
+                # Create a NumPy array of raw seconds
+                seconds_array = self.loopdata[jobid]["TIMESTAMP"] - np.min(self.loopdata[jobid]["TIMESTAMP"]) 
             
-            ymin,ymax = self.get_metric_lims(metric)
-            if (ymin != None) and (ymax !=None):
-                plx.ylim(ymin,ymax)
+                plot_index = metrics.index(metric) 
+                plx.subplot(1,2).subplot(plot_index +1 , 1)
+                plx.scatter(seconds_array, self.loopdata[jobid][metric],marker='dot')
+            
+                ymin,ymax = self.get_metric_lims(metric)
+                if (ymin != None) and (ymax !=None):
+                    plx.ylim(ymin,ymax)
 
-            plx.ylabel(metric)
+                plx.ylabel(metric)
             
             
         plx.xlabel("Time (s)")
