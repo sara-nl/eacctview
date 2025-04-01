@@ -4,7 +4,7 @@ import argparse
 def main():
     
     parser = argparse.ArgumentParser()
-    parser.add_argument("-j", "--jobid", metavar="JobID", help="Plot Roofline and Timeline from eacct tool", default = [], type=str, nargs='+')
+    parser.add_argument("-j", "--jobid", metavar="JobID/s", help="Plot Roofline and Timeline from eacct tool", default = [], type=str, nargs='+')
     parser.add_argument("-c", "--csv", metavar="csv", help="Plot Roofline and Timeline from csvfile", type=str, nargs=1)
     parser.add_argument("--xvy-metrics", metavar="METRIC_STRING", help="2D metric v metric plot", default = [], type=str, nargs=2, required=False)
     parser.add_argument("--time-metrics", metavar="METRIC_STRING/S", help="Metrics to plot timeline", default = ["CPI", "MEM_GBS", "GFLOPS"], type=str, nargs='+', required=False)
