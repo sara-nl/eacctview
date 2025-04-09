@@ -310,8 +310,8 @@ class Plotter():
             plx.subplot(1, 1)
             plx.theme("pro")
             plx.plotsize(70, 100)
-            
-            plx.plot(self.avgdata[xvar], self.avgdata[yvar], color="red", marker='sd',label="JID: " + str(int(self.avgdata["JOBID"][0])) + "." +str(int(self.avgdata["STEPID"][0])))
+            for jobid in self.job_ids:
+                plx.plot(self.avgdata[jobid][xvar], self.avgdata[jobid][yvar],  marker='sd',label="JID: " + str(self.avgdata[jobid]["JOBID"][0]))
             plx.ylabel(yvar)
             plx.xlabel(xvar)
 
