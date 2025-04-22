@@ -72,11 +72,14 @@ eacctview -j 12345678 --xvy-metrics GPU0_UTIL_PERC GPU0_MEM_UTIL_PERC
 ```
 
 
-## Example:
-<img src="img/eacct_compare.png"/>
+### Putting it all together:
+
 ```
 eacctview -j 11090949 11090670 --time-metrics GPU0_UTIL_PERC GPU0_MEM_UTIL_PERC GPU0_POWER_W DRAM_POWER_W --xvy-metrics GPU0_UTIL_PERC GPU0_MEM_UTIL_PERC
 ```
+
+<img src="img/eacct_compare.png"/>
+
 
 
 
