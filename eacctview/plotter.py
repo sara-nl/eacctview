@@ -3,17 +3,17 @@ import re
 from subprocess import Popen, PIPE
 import os
 
+from dataloader import Dataloader
 import numpy as np
 import plotext as plx
 
+import pdb
 
-class Plotter():
+
+# Define the child class
+class Plotter(Dataloader):
     def __init__(self):
-
-        self.avgdata = {}
-        self.loopdata = {}
-
-        self.job_ids = []
+        super().__init__()  # Call parent __init__
 
         self.loops_status=False
         self.loop_metrics = ["AVG_CPUFREQ_KHZ","AVG_IMCFREQ_KHZ","DEF_FREQ_KHZ","CPI","TPI","MEM_GBS","IO_MBS","PERC_MPI","DC_NODE_POWER_W","DRAM_POWER_W","PCK_POWER_W","GFLOPS","L1_MISSES","L2_MISSES","L3_MISSES","SPOPS_SINGLE","SPOPS_128","SPOPS_256","SPOPS_512","DPOPS_SINGLE","DPOPS_128","DPOPS_256","DPOPS_512","TEMP0","TEMP1","TEMP2","TEMP3","GPU0_POWER_W","GPU0_FREQ_KHZ","GPU0_MEM_FREQ_KHZ","GPU0_UTIL_PERC","GPU0_MEM_UTIL_PERC","GPU0_GFLOPS","GPU0_TEMP","GPU0_MEMTEMP","GPU1_POWER_W","GPU1_FREQ_KHZ","GPU1_MEM_FREQ_KHZ","GPU1_UTIL_PERC","GPU1_MEM_UTIL_PERC","GPU1_GFLOPS","GPU1_TEMP","GPU1_MEMTEMP","GPU2_POWER_W","GPU2_FREQ_KHZ","GPU2_MEM_FREQ_KHZ","GPU2_UTIL_PERC","GPU2_MEM_UTIL_PERC","GPU2_GFLOPS","GPU2_TEMP","GPU2_MEMTEMP","GPU3_POWER_W","GPU3_FREQ_KHZ","GPU3_MEM_FREQ_KHZ","GPU3_UTIL_PERC","GPU3_MEM_UTIL_PERC","GPU3_GFLOPS","GPU3_TEMP","GPU3_MEMTEMP","GPU4_POWER_W","GPU4_FREQ_KHZ","GPU4_MEM_FREQ_KHZ","GPU4_UTIL_PERC","GPU4_MEM_UTIL_PERC","GPU4_GFLOPS","GPU4_TEMP","GPU4_MEMTEMP","GPU5_POWER_W","GPU5_FREQ_KHZ","GPU5_MEM_FREQ_KHZ","GPU5_UTIL_PERC","GPU5_MEM_UTIL_PERC","GPU5_GFLOPS","GPU5_TEMP","GPU5_MEMTEMP","GPU6_POWER_W","GPU6_FREQ_KHZ","GPU6_MEM_FREQ_KHZ","GPU6_UTIL_PERC","GPU6_MEM_UTIL_PERC","GPU6_GFLOPS","GPU6_TEMP","GPU6_MEMTEMP","GPU7_POWER_W","GPU7_FREQ_KHZ","GPU7_MEM_FREQ_KHZ","GPU7_UTIL_PERC","GPU7_MEM_UTIL_PERC","GPU7_GFLOPS","GPU7_TEMP","GPU7_MEMTEMP","LOOP_SIZE"]
@@ -40,21 +40,6 @@ class Plotter():
             "Fat_Rome": "tab:purple",
             "Fat_Genoa": "tab:brown"
             }
-
-    
-
-
-    def get_jobid(self,jobids_from_args):
-        """
-        gets the jobid/s (with corresponding stepid)
-        Defaults step id = 0 if non is specified
-        """
-        for jobid in jobids_from_args:
-            if len(jobid.split(".")) == 1:
-                self.job_ids.append(jobid + ".0")
-            elif len(jobid.split(".")) == 2:
-                self.job_ids.append(jobid)
-
 
 
     def get_architecture_specs(self, data):
@@ -129,149 +114,6 @@ class Plotter():
     def print_timeline_metrics(self):
         print(self.loop_metrics)
 
-    def csv_reader(self):
-
-        header_list = []
-        values_list = []
-        idx = 0
-
-        with open(self.filename) as csvfile:
-            reader = csv.reader(csvfile, delimiter=";")
-            for row in reader:
-                if idx == 0:
-                    header_list = row
-                    idx += 1 # maybe there is better logic here
-                    for i in range(len(header_list)):
-                        values_list.append([])
-                    continue
-                else:
-                    for i in range(len(row)):
-                        try:
-                            values_list[i].append(float(row[i]))
-                        except:
-                            values_list[i].append(row[i])
-                                
-        tmp_data = {}
-        for column in header_list:
-            
-            tmp_data[column] = values_list[header_list.index(column)]
-        
-        self.check_eacct_data(tmp_data)
-        return(tmp_data)
-    
-    def check_eacct_data(self,tmp_data):
-        # check if policy is enabled
-        if (len(self.avgdata) == 0) and ('POLICY' in tmp_data.keys()):
-            for policy in tmp_data['POLICY']:
-                if policy == "NP":
-                    print("Did not enable an EAR policy.")
-                    print("No Application metrics can be found/displayed.")
-                    print("Resubmit your job with:")
-                    print("#SBATCH --ear=on")
-                    print("#SBATCH --ear-policy=monitoring/min_time/min_energy")
-                    exit(1)
-
-        # check if actual metrics were found for the job
-        for mem in tmp_data['MEM_GBS']:
-            index = tmp_data['MEM_GBS'].index(mem)
-            if (mem == 0.0) and (tmp_data['CPI'][index] == 0.0):
-                print("EARL Enabled with a policy BUT no metrics found!!!")
-                print("THIS IS WEIRD THERE SHOULD BE")
-                print("Something went wrong with the job or DB")
-                print("Check the command eacct -j JOBID to see whats going on.")
-                exit(1)
-
-    def get_eacct_from_csv(self, filename):
-
-        self.filename = filename
-        tmp_data = self.csv_reader()
-        tmp_data = self.get_partition(tmp_data)
-        tmp_data = self.get_architecture_specs(tmp_data)
-
-
-        # This is a bit of a hack
-        # because csv can be created in multiple ways aparently
-        if "LOOPID" in tmp_data.keys():
-            self.loopdata = tmp_data
-            tmp_data['OI'] = [sum(tmp_data['GFLOPS'])/len(tmp_data['GFLOPS'])/sum(tmp_data['MEM_GBS'])/len(tmp_data['MEM_GBS'])]
-            tmp_data["CPU-GFLOPS"] = [sum(tmp_data['GFLOPS'])/len(tmp_data['GFLOPS'])] # again disparity in data
-            self.avgdata = tmp_data
-            self.loops_status = True
-
-        else:
-            tmp_data['OI'] = [tmp_data['CPU-GFLOPS'][0]/tmp_data['MEM_GBS'][0]]
-            self.avgdata = tmp_data
-
-
-    def get_eacct_jobavg(self):
-        '''
-        get the average job statistics from eacct
-        '''
-
-        for jobid in self.job_ids:
-            self.filename = jobid+'.csv'
-            try:
-                os.remove(self.filename)
-            except FileNotFoundError:
-                pass
-
-
-            try:
-                print("Querying jobavg: (jobid.stepid): ("+jobid+")")
-                process = Popen(['eacct','-j',jobid,'-l','-c',self.filename], stdout=PIPE, stderr=PIPE)
-        
-                output, error = process.communicate()
-                output = output.decode('ISO-8859-1').strip()
-                error = error.decode('ISO-8859-1').strip()
-
-            except FileNotFoundError:
-                print("eacct command not found.")
-                print("You need to load the ear module or install the eacct tool....")
-                exit(1)
-
-            if 'No jobs found' in error:
-                print("Could not find job step from eacct.")
-                print("You probably did not enable the EARL.")
-                print("Check the command eacct -j JOBID to see if there exists any job steps..")
-                exit(1)
-
-
-            tmp_data = self.csv_reader()
-            tmp_data = self.get_partition(tmp_data)
-            tmp_data = self.get_architecture_specs(tmp_data)
-
-            tmp_data['OI'] = [tmp_data['CPU-GFLOPS'][0]/tmp_data['MEM_GBS'][0]]
-        
-            self.avgdata[jobid] = tmp_data
-
-            os.remove(self.filename) 
-
-
-    def get_eacct_jobloop(self):
-
-        for jobid in self.job_ids:
-            self.filename = jobid + '.csv'
-            try:
-                os.remove(self.filename)
-            except FileNotFoundError:
-                pass
-
-            print("Querying jobloop: (jobid.stepid): ("+jobid+")")
-            process = Popen(['eacct','-j',jobid,'-r','-c',self.filename], stdout=PIPE, stderr=PIPE)
-
-            output, error = process.communicate()
-            output = output.decode('ISO-8859-1').strip()
-            error = error.decode('ISO-8859-1').strip()
-
-
-            if "No loops retrieved" not in error:
-                tmp_data = self.csv_reader()
-                self.loopdata[jobid] = tmp_data
-                self.loops_status = True
-                os.remove(self.filename)
-            else:
-                print(error)
-
     def get_metric_lims(self,metric):
 
         if metric == "CPI":
@@ -345,9 +187,9 @@ class Plotter():
         S_I = S_W/self.arch_DRAMBW
         H_I = H_W/self.arch_DRAMBW
 
-        plx.subplot(1, 1)
+        #plx.subplot(1, 1)
         plx.theme("pro")
-        plx.plotsize(70, 100)
+        #plx.plotsize(70, 100)
         plx.xscale('log')
         plx.yscale('log')
 
@@ -409,17 +251,46 @@ class Plotter():
         plx.xlabel("Time (s)")
 
 
+    def energy_bar(self):
+        plx.theme("pro")
+        #y = plx.sin() # sinusoidal test signal\
+        #plx.scatter(y) 
+        #plx.title("Scatter Plot") # to apply a title
+        #plx.show() # to finally plot
+
+        pizzas = ["Sausage", "Pepperoni", "Mushrooms", "Cheese", "Chicken", "Beef"]
+        percentages = [14, 36, 11, 8, 7, 4]
+
+        plx.bar(pizzas, percentages, orientation = "horizontal", width = 3 / 5) # or in short orientation = 'h'
+        #plx.theme("pro")
+        #pizzas = ["Sausage", "Pepperoni", "Mushrooms", "Cheese", "Chicken", "Beef"]
+        #percentages = [14, 36, 11, 8, 7, 4]
+        #plx.simple_bar(pizzas, percentages, width = 100, title = 'Most Favored Pizzas in the World')
+
 
     def terminal(self, metrics, xvy_metrics=None):
 
         plx.clf()
         plx.subplots(1, 2)
+        plx.subplot(1,1).subplots(2, 1) 
+        plx.plotsize(70, 100)
 
-        if xvy_metrics is None:
+        # left panel
+        plx.subplot(1,1).subplot(1, 1) # this should be the bar plot
+
+        self.energy_bar()
+
+        plx.subplot(1,1).subplot(2, 1) # this should be the bar plot
+        if not xvy_metrics and self.plot_earl_avg:
             self.roofline(plx)
-        else:
+        elif xvy_metrics and self.plot_earl_avg:
             self.var_vs_var(plx, xvy_metrics)
+        else:
+            plx.theme("pro")
+            plx.text(self.avg_data_err_msg,x=-0.5,y=0)
+            plx.xlim(-1,1)
 
+        ## plot the right panel by default
         if self.loops_status:
             self.timelines(plx,metrics)
         else:
@@ -427,7 +298,6 @@ class Plotter():
             plx.theme("pro")
             plx.text("EAR LOOPS NOT ACTIVATED.\nRe-run your job with `export EARL_REPORT_LOOPS=1`",x=-0.5,y=0)
             plx.xlim(-1,1)
-
 
         plx.show()
 
