@@ -24,7 +24,12 @@ def main():
         exit(0)
 
     if args.jobid:
+
+
+
         plotter.get_jobid(args.jobid)
+        
+        plotter.get_eacct_basic()
         plotter.get_eacct_jobavg()
         plotter.get_eacct_jobloop()
 

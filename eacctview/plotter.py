@@ -253,30 +253,36 @@ class Plotter(Dataloader):
 
     def energy_bar(self):
         plx.theme("pro")
-        #y = plx.sin() # sinusoidal test signal\
-        #plx.scatter(y) 
-        #plx.title("Scatter Plot") # to apply a title
-        #plx.show() # to finally plot
+        plx.title("Energy(kWh)")
+        # filter out the job steps
+        energys = []
+        jobids = []
+        #for jid in self.userdata['JOB-STEP-AID']:
+        #    if "-sb-" in jid: 
+        #        jobids.append(jid.split("-")[0])
+        #        index = self.userdata['JOB-STEP-AID'].index(jid)
+        #        energys.append(self.userdata['ENERGY(J)'][index]*2.77778e-7)
 
-        pizzas = ["Sausage", "Pepperoni", "Mushrooms", "Cheese", "Chicken", "Beef"]
-        percentages = [14, 36, 11, 8, 7, 4]
+        for jobid in self.avgdata.keys():
+            avg_power = sum(self.avgdata[jobid]['DC_NODE_POWER_W'])/len(self.avgdata[jobid]['DC_NODE_POWER_W'])
+            start = sum(self.avgdata[jobid]['START_TIME'])/len(self.avgdata[jobid]['START_TIME'])
+            end = sum(self.avgdata[jobid]['END_TIME'])/len(self.avgdata[jobid]['END_TIME'])
+            wtime = end - start
+            jobids.append(jobid)
+            energys.append(avg_power * wtime * 2.77778e-7)
 
-        plx.bar(pizzas, percentages, orientation = "horizontal", width = 3 / 5) # or in short orientation = 'h'
-        #plx.theme("pro")
-        #pizzas = ["Sausage", "Pepperoni", "Mushrooms", "Cheese", "Chicken", "Beef"]
-        #percentages = [14, 36, 11, 8, 7, 4]
-        #plx.simple_bar(pizzas, percentages, width = 100, title = 'Most Favored Pizzas in the World')
-
+        plx.bar(jobids, energys, orientation = "vertical", width = 3 / 5, color='white') # or in short orientation = 'h'
 
     def terminal(self, metrics, xvy_metrics=None):
 
         plx.clf()
         plx.subplots(1, 2)
         plx.subplot(1,1).subplots(2, 1) 
-        plx.plotsize(70, 100)
+        plx.plotsize(60, 100)
 
         # left panel
         plx.subplot(1,1).subplot(1, 1) # this should be the bar plot
+        plx.plotsize(60,10)
 
         self.energy_bar()
 

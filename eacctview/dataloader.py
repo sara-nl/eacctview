@@ -6,6 +6,8 @@ import os
 import numpy as np
 import plotext as plx
 
+import pdb
+
 class Dataloader():
     def __init__(self):
 
@@ -15,6 +17,7 @@ class Dataloader():
 
         self.avg_data_err_msg = None
 
+        self.userdata = {}
         self.avgdata = {}
         self.loopdata = {}
 
@@ -22,7 +25,9 @@ class Dataloader():
 
         self.loops_status=False
 
-        self.filename = "tmp.csv"
+        self.userfile = "tmp.csv"
+        self.avgfile = "tmp.csv"
+        self.loopfile = "tmp.csv"
 
     def get_jobid(self,jobids_from_args):
         """
@@ -35,13 +40,13 @@ class Dataloader():
             elif len(jobid.split(".")) == 2:
                 self.job_ids.append(jobid)
 
-    def csv_reader(self):
+    def csv_reader(self,filename):
 
         header_list = []
         values_list = []
         idx = 0
 
-        with open(self.filename) as csvfile:
+        with open(filename) as csvfile:
             reader = csv.reader(csvfile, delimiter=";")
             for row in reader:
                 if idx == 0:
@@ -62,7 +67,7 @@ class Dataloader():
             
             tmp_data[column] = values_list[header_list.index(column)]
         
-        self.check_eacct_data(tmp_data)
+        #self.check_eacct_data(tmp_data)
         return(tmp_data)
     
     def check_eacct_data(self,tmp_data):
@@ -94,8 +99,7 @@ class Dataloader():
 
     def get_eacct_from_csv(self, filename):
 
-        self.filename = filename
-        tmp_data = self.csv_reader()
+        tmp_data = self.csv_reader(filename)
         tmp_data = self.get_partition(tmp_data)
         tmp_data = self.get_architecture_specs(tmp_data)
 
@@ -113,6 +117,26 @@ class Dataloader():
             tmp_data['OI'] = [tmp_data['CPU-GFLOPS'][0]/tmp_data['MEM_GBS'][0]]
             self.avgdata = tmp_data
 
+    def get_eacct_basic(self):
+        '''
+        Get the energy of the last 5 jobs run.
+        '''
+        self.userfile = os.environ["USER"] + ".csv"
+
+        try:
+            print("Querying username: "+ os.environ["USER"])
+            process = Popen(['eacct','-u',os.environ["USER"],'-n 10','-c',self.userfile], stdout=PIPE, stderr=PIPE)
+    
+            output, error = process.communicate()
+            output = output.decode('ISO-8859-1').strip()
+            error = error.decode('ISO-8859-1').strip()
+
+        except FileNotFoundError:
+            print("eacct command not found.")
+            print("You need to load the ear module or install the eacct tool....")
+            exit(1)        
+        
+        self.userdata = self.csv_reader(self.userfile)
 
     def get_eacct_jobavg(self):
         '''
@@ -148,7 +172,7 @@ class Dataloader():
                 self.plot_earl_avg = False
                 self.plot_earl_loops = False
 
-            tmp_data = self.csv_reader()
+            tmp_data = self.csv_reader(self.filename)
             tmp_data = self.get_partition(tmp_data)
             tmp_data = self.get_architecture_specs(tmp_data)
 
@@ -180,7 +204,7 @@ class Dataloader():
 
 
             if "No loops retrieved" not in error:
-                tmp_data = self.csv_reader()
+                tmp_data = self.csv_reader(self.filename)
                 self.loopdata[jobid] = tmp_data
                 self.loops_status = True
                 os.remove(self.filename)
