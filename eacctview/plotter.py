@@ -271,7 +271,9 @@ class Plotter(Dataloader):
             jobids.append(jobid)
             energys.append(avg_power * wtime * 2.77778e-7)
 
-        plx.bar(jobids, energys, orientation = "vertical", width = 3 / 5, color='white') # or in short orientation = 'h'
+        # you need to work on the shape of the data here
+        plx.multiple_bar(jobids, [energys], label = jobids)
+        #plx.bar(jobids, energys, orientation = "vertical", width = 3 / 5, color = 'white') # or in short orientation = 'h'
 
     def terminal(self, metrics, xvy_metrics=None):
 
