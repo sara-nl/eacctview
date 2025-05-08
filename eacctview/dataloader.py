@@ -2,6 +2,7 @@ import csv
 import re
 from subprocess import Popen, PIPE
 import os
+import concurrent.futures
 
 import numpy as np
 import plotext as plx
@@ -25,9 +26,6 @@ class Dataloader():
 
         self.loops_status=False
 
-        self.userfile = "tmp.csv"
-        self.avgfile = "tmp.csv"
-        self.loopfile = "tmp.csv"
 
     def get_jobid(self,jobids_from_args):
         """
@@ -40,7 +38,43 @@ class Dataloader():
             elif len(jobid.split(".")) == 2:
                 self.job_ids.append(jobid)
 
-    def csv_reader(self,filename):
+    def get_eacct_from_csv(self, filename):
+
+        tmp_data = self._csv_reader(filename)
+        tmp_data = self._get_partition(tmp_data)
+        tmp_data = self._get_architecture_specs(tmp_data)
+
+
+        # This is a bit of a hack
+        # because csv can be created in multiple ways aparently
+        if "LOOPID" in tmp_data.keys():
+            self.loopdata = tmp_data
+            tmp_data['OI'] = [sum(tmp_data['GFLOPS'])/len(tmp_data['GFLOPS'])/sum(tmp_data['MEM_GBS'])/len(tmp_data['MEM_GBS'])]
+            tmp_data["CPU-GFLOPS"] = [sum(tmp_data['GFLOPS'])/len(tmp_data['GFLOPS'])] # again disparity in data
+            self.avgdata = tmp_data
+            self.loops_status = True
+
+        else:
+            tmp_data['OI'] = [tmp_data['CPU-GFLOPS'][0]/tmp_data['MEM_GBS'][0]]
+            self.avgdata = tmp_data
+    
+
+    def get_eacct_data(self):
+
+        # Maybe the use of threading is overkill.
+        executor_avg = concurrent.futures.ThreadPoolExecutor(max_workers=len(self.job_ids))
+        executor_loop = concurrent.futures.ThreadPoolExecutor(max_workers=len(self.job_ids))
+        
+        result_avg = executor_avg.map(self._get_eacct_jobavg, self.job_ids)
+        result_loop = executor_loop.map(self._get_eacct_jobloop, self.job_ids)
+
+        avg_data = list(result_avg)
+        loop_data  = list(result_loop)
+        for i in range(len(avg_data)):
+            self.avgdata[self.job_ids[i]] = avg_data[i]
+            self.loopdata[self.job_ids[i]] = loop_data[i]
+
+    def _csv_reader(self,filename):
 
         header_list = []
         values_list = []
@@ -70,7 +104,7 @@ class Dataloader():
         #self.check_eacct_data(tmp_data)
         return(tmp_data)
     
-    def check_eacct_data(self,tmp_data):
+    def _check_eacct_data(self,tmp_data):
         # check if policy is enabled
         if (len(self.avgdata) == 0) and ('POLICY' in tmp_data.keys()):
             for policy in tmp_data['POLICY']:
@@ -97,27 +131,7 @@ class Dataloader():
                 self.plot_earl_loops = False
 
 
-    def get_eacct_from_csv(self, filename):
-
-        tmp_data = self.csv_reader(filename)
-        tmp_data = self.get_partition(tmp_data)
-        tmp_data = self.get_architecture_specs(tmp_data)
-
-
-        # This is a bit of a hack
-        # because csv can be created in multiple ways aparently
-        if "LOOPID" in tmp_data.keys():
-            self.loopdata = tmp_data
-            tmp_data['OI'] = [sum(tmp_data['GFLOPS'])/len(tmp_data['GFLOPS'])/sum(tmp_data['MEM_GBS'])/len(tmp_data['MEM_GBS'])]
-            tmp_data["CPU-GFLOPS"] = [sum(tmp_data['GFLOPS'])/len(tmp_data['GFLOPS'])] # again disparity in data
-            self.avgdata = tmp_data
-            self.loops_status = True
-
-        else:
-            tmp_data['OI'] = [tmp_data['CPU-GFLOPS'][0]/tmp_data['MEM_GBS'][0]]
-            self.avgdata = tmp_data
-
-    def get_eacct_basic(self):
+    def _get_eacct_basic(self):
         '''
         Get the energy of the last 5 jobs run.
         '''
@@ -136,78 +150,115 @@ class Dataloader():
             print("You need to load the ear module or install the eacct tool....")
             exit(1)        
         
-        self.userdata = self.csv_reader(self.userfile)
+        self.userdata = self._csv_reader(self.userfile)
 
-    def get_eacct_jobavg(self):
+    def _get_eacct_jobavg(self,jobid):
         '''
         get the average job statistics from eacct
         '''
-
-        for jobid in self.job_ids:
-            self.filename = jobid+'.csv'
-            try:
-                os.remove(self.filename)
-            except FileNotFoundError:
-                pass
-
-
-            try:
-                print("Querying jobavg: (jobid.stepid): ("+jobid+")")
-                process = Popen(['eacct','-j',jobid,'-l','-c',self.filename], stdout=PIPE, stderr=PIPE)
-        
-                output, error = process.communicate()
-                output = output.decode('ISO-8859-1').strip()
-                error = error.decode('ISO-8859-1').strip()
-
-            except FileNotFoundError:
-                print("eacct command not found.")
-                print("You need to load the ear module or install the eacct tool....")
-                exit(1)
-
-            if 'No jobs found' in error:
-                self.avg_data_err_msg = "Could not find job step from eacct.\n"
-                self.avg_data_err_msg += "You probably did not enable the EARL.\n"
-                self.avg_data_err_msg += "Check the command eacct -j JOBID to see if there exists any job steps..\n"
-                self.plot_earl_off = True
-                self.plot_earl_avg = False
-                self.plot_earl_loops = False
-
-            tmp_data = self.csv_reader(self.filename)
-            tmp_data = self.get_partition(tmp_data)
-            tmp_data = self.get_architecture_specs(tmp_data)
-
-            try:
-                tmp_data['OI'] = [tmp_data['CPU-GFLOPS'][0]/tmp_data['MEM_GBS'][0]]
-            except:
-                tmp_data['OI'] = 0 
-        
-            self.avgdata[jobid] = tmp_data
-
-            os.remove(self.filename) 
-
-
-    def get_eacct_jobloop(self):
-
-        for jobid in self.job_ids:
-            self.filename = jobid + '.csv'
-            try:
-                os.remove(self.filename)
-            except FileNotFoundError:
-                pass
-
-            print("Querying jobloop: (jobid.stepid): ("+jobid+")")
-            process = Popen(['eacct','-j',jobid,'-r','-c',self.filename], stdout=PIPE, stderr=PIPE)
-
+        #for jobid in self.job_ids:
+        avgfile = jobid+'.avg.csv'
+        #try:
+        #    os.remove(avgfile)
+        #except FileNotFoundError:
+        #    pass
+        try:
+            print("Querying jobavg: (jobid.stepid): ("+jobid+")")
+            process = Popen(['eacct','-j',jobid,'-l','-c',avgfile], stdout=PIPE, stderr=PIPE)
+    
             output, error = process.communicate()
             output = output.decode('ISO-8859-1').strip()
             error = error.decode('ISO-8859-1').strip()
+        except FileNotFoundError:
+            print("eacct command not found.")
+            print("You need to load the ear module or install the eacct tool....")
+            exit(1)
+
+        if 'No jobs found' in error:
+            self.avg_data_err_msg = "Could not find job step from eacct.\n"
+            self.avg_data_err_msg += "You probably did not enable the EARL.\n"
+            self.avg_data_err_msg += "Check the command eacct -j JOBID to see if there exists any job steps..\n"
+            self.plot_earl_off = True
+            self.plot_earl_avg = False
+            self.plot_earl_loops = False
+
+        tmp_data = self._csv_reader(avgfile)
+        tmp_data = self._get_partition(tmp_data)
+        tmp_data = self._get_architecture_specs(tmp_data)
+        try:
+            tmp_data['OI'] = [tmp_data['CPU-GFLOPS'][0]/tmp_data['MEM_GBS'][0]]
+        except:
+            tmp_data['OI'] = 0 
+    
+        #self.avgdata[jobid] = tmp_data
+        os.remove(avgfile) 
+        return(tmp_data)
 
 
-            if "No loops retrieved" not in error:
-                tmp_data = self.csv_reader(self.filename)
-                self.loopdata[jobid] = tmp_data
-                self.loops_status = True
-                os.remove(self.filename)
-            else:
-                print(error)
-                self.plot_earl_loops = False
+    def _get_eacct_jobloop(self,jobid):
+
+        #for jobid in self.job_ids:
+        #loopfile = jobid + '.csv'
+        loopfile = jobid+'.loop.csv'
+        try:
+            os.remove(loopfile)
+        except FileNotFoundError:
+            pass
+
+        print("Querying jobloop: (jobid.stepid): ("+jobid+")")
+        process = Popen(['eacct','-j',jobid,'-r','-c',loopfile], stdout=PIPE, stderr=PIPE)
+        output, error = process.communicate()
+        output = output.decode('ISO-8859-1').strip()
+        error = error.decode('ISO-8859-1').strip()
+
+        if "No loops retrieved" not in error:
+            tmp_data = self._csv_reader(loopfile)
+            #self.loopdata[jobid] = tmp_data
+            self.loops_status = True
+            os.remove(loopfile)
+            return(tmp_data)
+        else:
+            print(error)
+            self.plot_earl_loops = False
+        
+
+    def _get_partition(self, data):
+
+        node_type = re.search(r'([a-zA-Z]*)',data['NODENAME'][0])[0]
+        node_number = int(re.search(r'(\d+)',data['NODENAME'][0])[0])
+
+        if (node_type == "tcn") & (node_number <= 525):
+            data['Arch'] = "AMD Rome 7H12 (2x)"
+        elif (node_type == "tcn") & (node_number > 525):
+            data['Arch'] = "AMD Genoa 9654 (2x)"
+        elif (node_type == "gcn") & (node_number <= 72):
+            data['Arch'] = "Intel Xeon Platinum 8360Y (2x)"
+        elif (node_type == "gcn") & (node_number > 72):
+            data['Arch'] = "AMD EPYC 9334 32-Core Processor (2x)"
+        else:
+            data['Arch'] = "UNK"
+
+        return(data)
+    
+    def _get_architecture_specs(self, data):
+
+        with open(self.arch_spec_file) as csvfile:
+            reader = csv.DictReader(csvfile, delimiter=";")
+            for row in reader:
+                if row["NAME"] == data['Arch']:
+
+                    self.arch_name = row['NAME']
+                    self.arch_ncores = float(row['NCORES'])
+                    self.arch_freq = float(row['CPU_FREQ_GHZ'])
+                    self.arch_NDPs = float(row['NDPS'])
+                    self.arch_memory_freq = float(row['MEM_FREQ_MHZ'])
+                    self.arch_memory_channels = float(row['N_MEM_CHANNELS'])
+                    self.arch_power = float(row["MAX_POWER_W"])
+                    self.arch_DP_RPEAK = self.arch_ncores * self.arch_freq * self.arch_NDPs
+                    self.arch_SP_RPEAK = self.arch_DP_RPEAK * 2.0
+                    self.arch_HP_RPEAK = self.arch_DP_RPEAK * 4.0
+                    # DRAMBW = (bits/bytes) * Mem_freq * N channels * (Mega/Giga)
+                    self.arch_DRAMBW = (64./8.) * self.arch_memory_freq * self.arch_memory_channels * (1e6/1e9) 
+
+        return(data)
+

@@ -41,62 +41,6 @@ class Plotter(Dataloader):
             "Fat_Genoa": "tab:brown"
             }
 
-
-    def get_architecture_specs(self, data):
-
-        with open(self.arch_spec_file) as csvfile:
-            reader = csv.DictReader(csvfile, delimiter=";")
-            for row in reader:
-                if row["NAME"] == data['Arch']:
-
-                    self.arch_name = row['NAME']
-                    self.arch_ncores = float(row['NCORES'])
-                    self.arch_freq = float(row['CPU_FREQ_GHZ'])
-                    self.arch_NDPs = float(row['NDPS'])
-                    self.arch_memory_freq = float(row['MEM_FREQ_MHZ'])
-                    self.arch_memory_channels = float(row['N_MEM_CHANNELS'])
-                    self.arch_power = float(row["MAX_POWER_W"])
-                    self.arch_DP_RPEAK = self.arch_ncores * self.arch_freq * self.arch_NDPs
-                    self.arch_SP_RPEAK = self.arch_DP_RPEAK * 2.0
-                    self.arch_HP_RPEAK = self.arch_DP_RPEAK * 4.0
-                    # DRAMBW = (bits/bytes) * Mem_freq * N channels * (Mega/Giga)
-                    self.arch_DRAMBW = (64./8.) * self.arch_memory_freq * self.arch_memory_channels * (1e6/1e9) 
-
-        return(data)
-
-    def set_architecture_specs(self, data):
-
-        self.arch_name = data['Arch']
-        self.arch_ncores = data['NCORES']
-        self.arch_freq = data['CPU_FREQ_GHZ']
-        self.arch_NDPs = data['NDPS']
-        self.arch_DP_RPEAK = self.arch_ncores * self.arch_freq * self.arch_NDPs
-        self.arch_SP_RPEAK = self.arch_DP_RPEAK * 2.0
-        self.arch_HP_RPEAK = self.arch_DP_RPEAK * 4.0
-        # DRAMBW = (bits/bytes) * Mem_freq * N channels * (Mega/Giga)
-        self.arch_DRAMBW = (64./8.) * data['MEM_FREQ_MHZ'] * data['N_MEM_CHANNELS'] * (1e6/1e9) 
-    
-
-
-    def get_partition(self, data):
-
-        node_type = re.search(r'([a-zA-Z]*)',data['NODENAME'][0])[0]
-        node_number = int(re.search(r'(\d+)',data['NODENAME'][0])[0])
-
-        if (node_type == "tcn") & (node_number <= 525):
-            data['Arch'] = "AMD Rome 7H12 (2x)"
-        elif (node_type == "tcn") & (node_number > 525):
-            data['Arch'] = "AMD Genoa 9654 (2x)"
-        elif (node_type == "gcn") & (node_number <= 72):
-            data['Arch'] = "Intel Xeon Platinum 8360Y (2x)"
-        elif (node_type == "gcn") & (node_number > 72):
-            data['Arch'] = "AMD EPYC 9334 32-Core Processor (2x)"
-        else:
-            data['Arch'] = "UNK"
-
-        return(data)
-
-
     def print_architecture_specs(self):
 
         with open(self.arch_spec_file) as csvfile:
@@ -220,18 +164,6 @@ class Plotter(Dataloader):
         plx.subplot(1,2).subplots(len(metrics), 1)
         plx.theme("pro")
 
-        ## Convert to timedelta64
-        #time_deltas = np.timedelta64(1, 's') * seconds_array
-        ## Extract hours, minutes, and seconds using vectorized operations
-        #hours = time_deltas.astype('timedelta64[h]').astype(int)
-        #minutes = (time_deltas - np.timedelta64(1, 'h') * hours).astype('timedelta64[m]').astype(int)
-        #seconds = (time_deltas - np.timedelta64(1, 'h') * hours - np.timedelta64(1, 'm') * minutes).astype('timedelta64[s]').astype(int)
-        ## Format the output as HH:MM:SS using vectorized string operations
-        #formatted_time = np.char.add(np.char.add(np.char.zfill(hours.astype(str), 2), ':'),
-        #                            np.char.add(np.char.zfill(minutes.astype(str), 2), ':'))
-        #formatted_time = np.char.add(formatted_time, np.char.zfill(seconds.astype(str), 2))
-        #formatted_time = formatted_time.tolist()
-
         for metric in metrics:
             for jobid in self.job_ids:
                 # Create a NumPy array of raw seconds
@@ -254,26 +186,18 @@ class Plotter(Dataloader):
     def energy_bar(self):
         plx.theme("pro")
         plx.title("Energy(kWh)")
-        # filter out the job steps
         energys = []
         jobids = []
-        #for jid in self.userdata['JOB-STEP-AID']:
-        #    if "-sb-" in jid: 
-        #        jobids.append(jid.split("-")[0])
-        #        index = self.userdata['JOB-STEP-AID'].index(jid)
-        #        energys.append(self.userdata['ENERGY(J)'][index]*2.77778e-7)
-
         for jobid in self.avgdata.keys():
             avg_power = sum(self.avgdata[jobid]['DC_NODE_POWER_W'])/len(self.avgdata[jobid]['DC_NODE_POWER_W'])
             start = sum(self.avgdata[jobid]['START_TIME'])/len(self.avgdata[jobid]['START_TIME'])
             end = sum(self.avgdata[jobid]['END_TIME'])/len(self.avgdata[jobid]['END_TIME'])
             wtime = end - start
             jobids.append(jobid)
-            energys.append(avg_power * wtime * 2.77778e-7)
+            # The reason appending each item as its own list is because of the multiple bar plot
+            energys.append([avg_power * wtime * 2.77778e-7])
 
-        # you need to work on the shape of the data here
-        plx.multiple_bar(jobids, [energys], label = jobids)
-        #plx.bar(jobids, energys, orientation = "vertical", width = 3 / 5, color = 'white') # or in short orientation = 'h'
+        plx.multiple_bar(["Jobs"], energys, label = jobids)
 
     def terminal(self, metrics, xvy_metrics=None):
 
