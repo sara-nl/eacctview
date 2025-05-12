@@ -11,10 +11,6 @@ import plotext as plx
 class Dataloader():
     def __init__(self):
 
-        self.plot_earl_off = True
-        self.plot_earl_avg = True
-        self.plot_earl_loops = True
-
         self.userdata = {}
         self.avgdata = {}
         self.loopdata = {}
@@ -168,7 +164,7 @@ class Dataloader():
         if 'No jobs found' in error:
             err_msg = "Could not find job step from eacct.\n"
             err_msg += "You probably did not enable the EARL.\n"
-            err_msg += "Check the command eacct -j JOBID to see if there exists any job steps..\n"
+            err_msg += "Check the command eacct -j JOBID..\nto see if there exists any job steps..\n"
             tmp_data["EARL_AVG_ERR"] = err_msg
         else:
             tmp_data = self._csv_reader(avgfile)
@@ -179,8 +175,8 @@ class Dataloader():
                 tmp_data['OI'] = [tmp_data['CPU-GFLOPS'][0]/tmp_data['MEM_GBS'][0]]
             except:
                 tmp_data['OI'] = 0 
-    
-        os.remove(avgfile) 
+            os.remove(avgfile) 
+        
         return(tmp_data)
 
 
