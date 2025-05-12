@@ -1,13 +1,10 @@
 import csv
-import re
 from subprocess import Popen, PIPE
 import os
 
-from dataloader import Dataloader
+from eacctview.dataloader import Dataloader
 import numpy as np
 import plotext as plx
-
-import pdb
 
 
 # Define the child class
@@ -93,11 +90,8 @@ class Plotter(Dataloader):
             xvar =  vars[0]
             yvar =  vars[1]
 
-            plx.subplot(1, 1)
-            plx.theme("pro")
-            plx.plotsize(70, 100)
             for jobid in self.job_ids:
-                plx.plot(self.avgdata[jobid][xvar], self.avgdata[jobid][yvar],  marker='sd',label="JID: " + str(self.avgdata[jobid]["JOBID"][0]))
+                plx.plot(self.avgdata[jobid][xvar], self.avgdata[jobid][yvar],  marker='sd',label="JID: " + str(int(self.avgdata[jobid]["JOBID"][0])) +"."+ str(int(self.avgdata[jobid]["STEPID"][0])))
             plx.ylabel(yvar)
             plx.xlabel(xvar)
 
@@ -131,8 +125,6 @@ class Plotter(Dataloader):
         S_I = S_W/self.arch_DRAMBW
         H_I = H_W/self.arch_DRAMBW
 
-        #plx.subplot(1, 1)
-        plx.theme("pro")
         #plx.plotsize(70, 100)
         plx.xscale('log')
         plx.yscale('log')
@@ -151,9 +143,7 @@ class Plotter(Dataloader):
         plx.text("DP 1/4 Node", np.max(D_I)/4.0 - np.max(D_I)/4.0 *0.9, y = np.max(D_W)/4.0)
         
         for jobid in self.job_ids:
-            plx.plot(self.avgdata[jobid]["OI"], self.avgdata[jobid]["CPU-GFLOPS"],marker='sd',label="JID: " + str(self.avgdata[jobid]["JOBID"][0]))
-
-        #plx.text(x = np.max(H_I)+ 600, y= np.max(NO_SIMD_DP_W) + np.max(NO_SIMD_DP_W) * Ytext_factor, text = "NO SIMD DP = "+ str(round(NO_SIMD_DP_Rpeak,2))+" GFLOPS", fontsize=8)
+            plx.plot(self.avgdata[jobid]["OI"], self.avgdata[jobid]["CPU-GFLOPS"],marker='sd',label="JID: " + str(int(self.avgdata[jobid]["JOBID"][0])) +"."+ str(int(self.avgdata[jobid]["STEPID"][0])))
 
         plx.title(self.arch_name + "  - DRAM BW = "+ str(self.arch_DRAMBW)+ " GB/s")
         plx.ylabel("Performance (GFLOPS)")
@@ -198,8 +188,29 @@ class Plotter(Dataloader):
             energys.append([avg_power * wtime * 2.77778e-7])
 
         plx.multiple_bar(["Jobs"], energys, label = jobids)
+    
+    def _sanity_plot(self):
+
+        N_avg_jobs = len(self.avgdata.keys())
+        N_avg_fails = 0
+        for jobid in self.avgdata.keys():
+            if self.avgdata[jobid]['EARL_AVG_ERR'].split():
+                N_avg_fails += 1
+        
+        if N_avg_fails == N_avg_jobs:
+            plx.clf()
+            plx.theme("pro")
+            plx.text(self.avgdata[jobid]['EARL_AVG_ERR'],x=-0.5,y=0)
+            plx.xlim(-1,1)
+            plx.show()
+            exit(1)
+
+
+
 
     def terminal(self, metrics, xvy_metrics=None):
+
+        self._sanity_plot()
 
         plx.clf()
         plx.subplots(1, 2)
@@ -213,12 +224,12 @@ class Plotter(Dataloader):
         self.energy_bar()
 
         plx.subplot(1,1).subplot(2, 1) # this should be the bar plot
+        plx.theme("pro")
         if not xvy_metrics and self.plot_earl_avg:
             self.roofline(plx)
         elif xvy_metrics and self.plot_earl_avg:
             self.var_vs_var(plx, xvy_metrics)
         else:
-            plx.theme("pro")
             plx.text(self.avg_data_err_msg,x=-0.5,y=0)
             plx.xlim(-1,1)
 

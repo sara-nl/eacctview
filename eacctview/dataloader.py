@@ -7,7 +7,6 @@ import concurrent.futures
 import numpy as np
 import plotext as plx
 
-import pdb
 
 class Dataloader():
     def __init__(self):
@@ -16,16 +15,11 @@ class Dataloader():
         self.plot_earl_avg = True
         self.plot_earl_loops = True
 
-        self.avg_data_err_msg = None
-
         self.userdata = {}
         self.avgdata = {}
         self.loopdata = {}
 
         self.job_ids = []
-
-        self.loops_status=False
-
 
     def get_jobid(self,jobids_from_args):
         """
@@ -71,8 +65,10 @@ class Dataloader():
         avg_data = list(result_avg)
         loop_data  = list(result_loop)
         for i in range(len(avg_data)):
+
             self.avgdata[self.job_ids[i]] = avg_data[i]
             self.loopdata[self.job_ids[i]] = loop_data[i]
+
 
     def _csv_reader(self,filename):
 
@@ -101,34 +97,34 @@ class Dataloader():
             
             tmp_data[column] = values_list[header_list.index(column)]
         
-        #self.check_eacct_data(tmp_data)
+        self._check_eacct_data(tmp_data)
         return(tmp_data)
     
     def _check_eacct_data(self,tmp_data):
         # check if policy is enabled
-        if (len(self.avgdata) == 0) and ('POLICY' in tmp_data.keys()):
-            for policy in tmp_data['POLICY']:
-                if policy == "NP":
-                    self.avg_data_err_msg = "Did not enable an EAR policy.\n"
-                    self.avg_data_err_msg += "No Application metrics can be found/displayed.\n"
-                    self.avg_data_err_msg += "Resubmit your job with:\n"
-                    self.avg_data_err_msg += "#SBATCH --ear=on\n"
-                    self.avg_data_err_msg += "#SBATCH --ear-policy=monitoring/min_time/min_energy\n"
-                    self.plot_earl_off = True
-                    self.plot_earl_avg = False
-                    self.plot_earl_loops = False
+
+        if ('POLICY' in tmp_data.keys()):
+            if not tmp_data['POLICY'][0].strip():
+                err_msg = "Did not enable an EAR policy.\n"
+                err_msg += "No Application metrics can be found/displayed.\n"
+                err_msg += "Resubmit your job with:\n"
+                err_msg += "#SBATCH --ear=on\n"
+                err_msg += "#SBATCH --ear-policy=monitoring/min_time/min_energy\n"
+                tmp_data["EARL_AVG_ERR"] = err_msg
+                return tmp_data
 
         # check if actual metrics were found for the job
         for mem in tmp_data['MEM_GBS']:
             index = tmp_data['MEM_GBS'].index(mem)
             if (mem == 0.0) and (tmp_data['CPI'][index] == 0.0):
-                self.avg_data_err_msg = "EARL Enabled with a policy BUT no metrics found!!!\n"
-                self.avg_data_err_msg += "THIS IS WEIRD THERE SHOULD BE\n"
-                self.avg_data_err_msg += "Something went wrong with the job or DB\n"
-                self.avg_data_err_msg += "Check the command eacct -j JOBID to see whats going on.\n"
-                self.plot_earl_off = True
-                self.plot_earl_avg = False
-                self.plot_earl_loops = False
+                err_msg = "EARL Enabled with a policy BUT no metrics found!!!\n"
+                err_msg += "THIS IS WEIRD THERE SHOULD BE\n"
+                err_msg += "Something went wrong with the job or DB\n"
+                err_msg += "Check the command eacct -j JOBID to see whats going on.\n"
+                tmp_data["EARL_AVG_ERR"] = err_msg
+                return tmp_data
+        tmp_data["EARL_AVG_ERR"] = ""
+        return tmp_data
 
 
     def _get_eacct_basic(self):
@@ -156,12 +152,7 @@ class Dataloader():
         '''
         get the average job statistics from eacct
         '''
-        #for jobid in self.job_ids:
         avgfile = jobid+'.avg.csv'
-        #try:
-        #    os.remove(avgfile)
-        #except FileNotFoundError:
-        #    pass
         try:
             print("Querying jobavg: (jobid.stepid): ("+jobid+")")
             process = Popen(['eacct','-j',jobid,'-l','-c',avgfile], stdout=PIPE, stderr=PIPE)
@@ -170,35 +161,31 @@ class Dataloader():
             output = output.decode('ISO-8859-1').strip()
             error = error.decode('ISO-8859-1').strip()
         except FileNotFoundError:
-            print("eacct command not found.")
-            print("You need to load the ear module or install the eacct tool....")
-            exit(1)
+            err_msg = "eacct command not found.\n"
+            err_msg += "You need to load the ear module or install the eacct tool...."
 
+        tmp_data = {}
         if 'No jobs found' in error:
-            self.avg_data_err_msg = "Could not find job step from eacct.\n"
-            self.avg_data_err_msg += "You probably did not enable the EARL.\n"
-            self.avg_data_err_msg += "Check the command eacct -j JOBID to see if there exists any job steps..\n"
-            self.plot_earl_off = True
-            self.plot_earl_avg = False
-            self.plot_earl_loops = False
-
-        tmp_data = self._csv_reader(avgfile)
-        tmp_data = self._get_partition(tmp_data)
-        tmp_data = self._get_architecture_specs(tmp_data)
-        try:
-            tmp_data['OI'] = [tmp_data['CPU-GFLOPS'][0]/tmp_data['MEM_GBS'][0]]
-        except:
-            tmp_data['OI'] = 0 
+            err_msg = "Could not find job step from eacct.\n"
+            err_msg += "You probably did not enable the EARL.\n"
+            err_msg += "Check the command eacct -j JOBID to see if there exists any job steps..\n"
+            tmp_data["EARL_AVG_ERR"] = err_msg
+        else:
+            tmp_data = self._csv_reader(avgfile)
+            tmp_data = self._get_partition(tmp_data)
+            tmp_data = self._get_architecture_specs(tmp_data)
+            tmp_data = self._check_eacct_data(tmp_data)
+            try:
+                tmp_data['OI'] = [tmp_data['CPU-GFLOPS'][0]/tmp_data['MEM_GBS'][0]]
+            except:
+                tmp_data['OI'] = 0 
     
-        #self.avgdata[jobid] = tmp_data
         os.remove(avgfile) 
         return(tmp_data)
 
 
     def _get_eacct_jobloop(self,jobid):
 
-        #for jobid in self.job_ids:
-        #loopfile = jobid + '.csv'
         loopfile = jobid+'.loop.csv'
         try:
             os.remove(loopfile)
@@ -213,13 +200,13 @@ class Dataloader():
 
         if "No loops retrieved" not in error:
             tmp_data = self._csv_reader(loopfile)
-            #self.loopdata[jobid] = tmp_data
-            self.loops_status = True
             os.remove(loopfile)
+            tmp_data["EARL_LOOP_ERR"] = ""
             return(tmp_data)
         else:
-            print(error)
-            self.plot_earl_loops = False
+            tmp_data = {}
+            tmp_data["EARL_LOOP_ERR"] = "No loops retrieved for jid "+jobid+"\n"
+            tmp_data["EARL_LOOP_ERR"] += "Check to see if EARL_REPORT_LOOPS=1 was set in the Job\n"
         
 
     def _get_partition(self, data):
