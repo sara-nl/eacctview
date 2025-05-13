@@ -6,6 +6,8 @@ from eacctview.dataloader import Dataloader
 import numpy as np
 import plotext as plx
 
+import pdb
+
 
 class Plotter(Dataloader):
     def __init__(self):
@@ -188,9 +190,12 @@ class Plotter(Dataloader):
             wtime = end - start
             jobids.append(jobid)
             # The reason appending each item as its own list is because of the multiple bar plot
-            energys.append([avg_power * wtime * 2.77778e-7])
+            energys.append([avg_power * wtime * 2.77778e-7 * len(self.avgdata[jobid]['DC_NODE_POWER_W'])])
 
-        plx.multiple_bar(["Jobs"], energys, label = jobids)
+        plx.multiple_bar(["Jobs"], energys)
+        ymin = min(energys)[0] - min(energys)[0]*.05
+        ymax = max(energys)[0] + max(energys)[0]*.05
+        plx.ylim(ymin,ymax)
     
     def _sanity_plot(self):
 
@@ -233,11 +238,11 @@ class Plotter(Dataloader):
         self._sanity_plot()
 
         plx.subplot(1,1).subplots(2, 1) 
-        plx.plotsize(60, 100)
+        plx.plotsize(80, 100)
 
         # left panel
         plx.subplot(1,1).subplot(1, 1) # this should be the bar plot
-        plx.plotsize(60,10)
+        plx.plotsize(80,10)
         
         if self.plot_earl_avg:
             self.energy_bar()

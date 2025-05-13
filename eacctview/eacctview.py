@@ -1,4 +1,4 @@
-from eacctview.plotter import Plotter
+from  eacctview.plotter import Plotter
 import argparse
 
 def main():

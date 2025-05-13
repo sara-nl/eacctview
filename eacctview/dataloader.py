@@ -172,7 +172,7 @@ class Dataloader():
             tmp_data = self._get_architecture_specs(tmp_data)
             tmp_data = self._check_eacct_data(tmp_data)
             try:
-                tmp_data['OI'] = [tmp_data['CPU-GFLOPS'][0]/tmp_data['MEM_GBS'][0]]
+                tmp_data['OI'] = [(sum(tmp_data['CPU-GFLOPS'])/len(tmp_data['CPU-GFLOPS']))/(sum(tmp_data['MEM_GBS'])/len(tmp_data['MEM_GBS']))]
             except:
                 tmp_data['OI'] = 0 
             os.remove(avgfile) 
